@@ -4,65 +4,82 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Ship-Scraper is a Flask web application for downloading, classifying, and training AI models on ship images. It scrapes ship images from maritime websites (ShipSpotting, VesselFinder, MarineTraffic, FleetMon), classifies them using a Vision Transformer model, and supports fine-tuning and data augmentation. Documentation and UI are in German.
+Ship Recognition Platform — a modular web application for downloading, classifying, and training AI models on ship images. Scrapes maritime websites (ShipSpotting, VesselFinder, MarineTraffic, FleetMon), classifies images using a Vision Transformer model, and supports fine-tuning and data augmentation. Documentation and UI are in German.
 
 ## Commands
 
 ```bash
-# Setup (first time)
-./setup.sh            # Linux/macOS
-setup.bat             # Windows
-
-# Activate virtual environment
-source venv/bin/activate        # Linux/macOS
-venv\Scripts\activate.bat       # Windows
-
-# Run the app (serves on http://localhost:3025)
-python app.py
-
 # Install dependencies
-pip install -r requirements.txt
-```
+pip install -e ".[dev]"
 
-There are no automated tests. Manual testing is done via the web UI or API calls (e.g., `curl http://localhost:3025/api/stats`).
+# Run the backend (serves on http://localhost:3025)
+python run.py
+
+# Run tests
+pytest
+
+# API docs available at http://localhost:3025/docs (Swagger UI)
+
+# Legacy Flask app (still works but being replaced)
+python app.py
+```
 
 ## Architecture
 
-**Two-file backend:**
-- `app.py` — Flask server with all API routes, database access, VPN management, and background job orchestration
-- `ml_engine.py` — ML operations: model loading (lazy, on first use), classification, fine-tuning, and image augmentation
+**Backend (FastAPI)** — `backend/` directory:
+- `backend/main.py` — FastAPI app entry point, lifespan, CORS, static mounts
+- `backend/config.py` — pydantic-settings configuration (reads from `.env`)
+- `backend/database.py` — SQLAlchemy engine, session, Base class
+- `backend/models/` — ORM models (Job, Item, Category, VPNLog, PredefinedURL, Classification, AugmentationLog)
+- `backend/schemas/` — Pydantic request/response schemas
+- `backend/routers/` — 8 FastAPI routers (vpn, scrape, ships, classify, training, augmentation, stats, settings)
+- `backend/services/` — Business logic layer (vpn_service, scrape_service, ml_service)
 
-**Frontend:** `templates/index.html` — Single-page app (embedded CSS/JS) with 6 tabs: Dashboard, Scraper, Ships, AI Classification, Training, Settings
+**ML Engine** — `ml_engine.py` (preserved from v1, wrapped by `backend/services/ml_service.py`):
+- Lazy-loaded ViT model from HuggingFace (`dima806/10_ship_types_image_detection`)
+- classify_image(), start_training(), augment_images()
 
-**Database:** SQLite (`schiffs-scraper.db`), schema defined in `schema.sql`. 8 tables: `jobs`, `items`, `categories`, `vpn_log`, `predefined_urls`, `classifications`, `augmentation_log`, `training_log`. Auto-created from schema on first run.
+**Frontend** — `templates/index.html` (legacy SPA, to be replaced by React in `frontend/`):
+- 6 tabs: Dashboard, Scraper, Ships, AI Classification, Training, Settings
+- Dark theme, vanilla JS, polling for async operations
 
-**ML Model:** HuggingFace `dima806/10_ship_types_image_detection` (ViT, ~350 MB). Cached locally in `models/ship_classifier/`. Downloaded automatically if missing. Classifies 10 ship types.
+**Database** — SQLite via SQLAlchemy ORM (`schiffs-scraper.db`):
+- 7 tables: jobs, items, categories, vpn_log, predefined_urls, classifications, augmentation_log
+- Alembic configured for migrations (`alembic.ini`, `backend/migrations/`)
 
 ## Key Patterns
 
-- **Background threads** for long-running operations (scraping, training, augmentation) — status polled via `/api/*/status` endpoints
-- **Global state variables** in `app.py` track active job status (e.g., `current_job`, `training_status`)
-- **Lazy model loading** — ViT model loads on first classification request, not at startup
-- **VPN integration** — NordVPN CLI; app works without it but warns about IP blocking
-- **No authentication** — designed for local/private use only
-- **CORS enabled** globally via `flask-cors`
+- **Service layer** separates business logic from route handlers
+- **Background threads** for scraping, training, augmentation (status polled via API)
+- **Lazy ML model loading** — loads on first classification request
+- **VPN integration** — NordVPN CLI; configurable via `VPN_ENABLED` in `.env`
+- **SQLAlchemy `metadata_`** — Item model uses `metadata_` (mapped to DB column `metadata`) to avoid SQLAlchemy reserved attribute name conflict
+- **Static file mounts** — `/downloads/` and `/uploads/` served directly by FastAPI
 
-## API Structure
+## API Endpoints (26 routes)
 
-All endpoints under `/api/`:
-- `/api/vpn/*` — VPN connect/disconnect/rotate/status
-- `/api/analyze`, `/api/jobs/*` — Website analysis and scraping job management
-- `/api/ships/*` — Downloaded image listing, filtering, stats
-- `/api/classify/*`, `/api/model/info`, `/api/classifications` — Image classification
-- `/api/training/*` — Fine-tuning control and status
-- `/api/augment/*` — Data augmentation
-- `/api/urls/*`, `/api/stats` — Settings and statistics
+All endpoints under `/api/`. Swagger docs at `/docs`.
+- VPN: `GET/POST /api/vpn/{status,connect,disconnect,rotate}`
+- Scraper: `POST /api/analyze`, `GET/POST /api/jobs`, `GET/POST/DELETE /api/jobs/{id}/*`
+- Ships: `GET /api/ships`, `GET /api/ships/{id}`, `GET /api/ships/stats`
+- Classification: `POST /api/classify`, `POST /api/classify/ship/{id}`, `GET /api/model/info`, `GET /api/classifications`
+- Training: `GET/POST /api/training/{status,start,datasets}`
+- Augmentation: `POST /api/augment`, `GET /api/augment/status`
+- Stats: `GET /api/stats`
+- Settings: `GET/POST/DELETE /api/urls`
 
 ## File Storage
 
 - `downloads/` — Scraped images organized by job ID
 - `uploads/` — User-uploaded images for classification
 - `augmented/` — Synthetic augmented images
-- `models/ship_classifier/` — ViT model weights and fine-tuned checkpoints
+- `models/ship_classifier/` — ViT model weights and checkpoints
+- `data/` — Training data directory (raw, processed, train, val, test, synthetic)
+- `logs/` — Application logs
 
-All of these directories plus the `.db` file are gitignored.
+All data directories plus `.db` files are gitignored.
+
+## Configuration
+
+Settings in `backend/config.py` via pydantic-settings. Override with `.env` file (see `.env.example`).
+Key settings: `PORT`, `DATABASE_URL`, `VPN_ENABLED`, `MODEL_DIR`, `DOWNLOAD_DIR`.

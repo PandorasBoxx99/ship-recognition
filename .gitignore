@@ -30,6 +30,28 @@ models/ship_classifier/.cache/
 # Augmented data
 augmented/
 
+# Uploads (user data)
+uploads/
+
+# Data directory (training data)
+data/raw/
+data/processed/
+data/train/
+data/val/
+data/test/
+data/synthetic/
+
+# Frontend build output
+frontend-dist/
+frontend/node_modules/
+frontend/dist/
+
+# Legacy backups
+legacy/
+
+# Logs directory
+logs/
+
 # IDE
 .vscode/
 .idea/
