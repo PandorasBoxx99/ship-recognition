@@ -55,8 +55,8 @@ app.add_middleware(
 )
 
 # --- Register routers ---
-from backend.routers import augmentation, classify, scrape, settings as settings_router
-from backend.routers import ships, stats, training, vpn
+from backend.routers import augmentation, classify, models, scrape, settings as settings_router
+from backend.routers import ship_entities, ships, stats, training, vpn
 
 app.include_router(vpn.router)
 app.include_router(scrape.router)
@@ -66,6 +66,8 @@ app.include_router(training.router)
 app.include_router(augmentation.router)
 app.include_router(stats.router)
 app.include_router(settings_router.router)
+app.include_router(models.router)
+app.include_router(ship_entities.router)
 
 
 # --- Static file mounts ---
