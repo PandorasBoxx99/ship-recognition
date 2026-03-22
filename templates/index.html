@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ship-Scraper</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --surface2: #273548;
+            --primary: #3b82f6;
+            --primary-dim: rgba(59, 130, 246, 0.15);
+            --success: #22c55e;
+            --success-dim: rgba(34, 197, 94, 0.15);
+            --warning: #f59e0b;
+            --warning-dim: rgba(245, 158, 11, 0.15);
+            --danger: #ef4444;
+            --danger-dim: rgba(239, 68, 68, 0.15);
+            --purple: #a855f7;
+            --purple-dim: rgba(168, 85, 247, 0.15);
+            --text: #f1f5f9;
+            --muted: #94a3b8;
+            --border: #334155;
+            --radius: 12px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* ============ HEADER ============ */
+        .header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0.75rem 1.5rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+
+        .logo {
+            font-size: 1.3rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 0.25rem;
+            overflow-x: auto;
+            flex: 1;
+        }
+
+        .tab {
+            padding: 0.6rem 1rem;
+            background: transparent;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            border-radius: 8px;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .tab:hover { background: var(--surface2); color: var(--text); }
+        .tab.active { background: var(--primary); color: white; }
+
+        .vpn-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.8rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            white-space: nowrap;
+        }
+        .vpn-indicator.on { background: var(--success-dim); color: var(--success); }
+        .vpn-indicator.off { background: var(--danger-dim); color: var(--danger); }
+        .vpn-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+        /* ============ LAYOUT ============ */
+        .main { padding: 1.5rem; max-width: 1400px; margin: 0 auto; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 1.5rem; }
+        .grid-full { grid-column: 1 / -1; }
+        @media (max-width: 900px) { .grid, .grid-3 { grid-template-columns: 1fr; } }
+
+        .card {
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+        }
+
+        .card h2 {
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card h3 { font-size: 0.9rem; margin-bottom: 0.75rem; color: var(--muted); }
+
+        /* ============ FORMS ============ */
+        input, select, textarea, button {
+            padding: 0.65rem 0.85rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-family: inherit;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            background: var(--bg);
+            color: var(--text);
+            border: 1px solid var(--border);
+            margin-bottom: 0.6rem;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        textarea { resize: vertical; min-height: 60px; }
+
+        button {
+            background: var(--primary);
+            color: white;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.15s;
+            width: 100%;
+            margin-bottom: 0.5rem;
+        }
+
+        button:hover { opacity: 0.9; }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .btn-success { background: var(--success); }
+        .btn-warning { background: var(--warning); color: #000; }
+        .btn-danger { background: var(--danger); }
+        .btn-secondary { background: #475569; }
+        .btn-purple { background: var(--purple); }
+        .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.8rem; width: auto; margin: 0; }
+        .btn-row { display: flex; gap: 0.5rem; }
+        .btn-row button { flex: 1; }
+
+        .label { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.2rem; }
+        .input-row { display: flex; gap: 0.5rem; align-items: start; }
+        .input-row input, .input-row select { flex: 1; }
+        .input-row button { width: auto; padding: 0.65rem 1.2rem; margin: 0; margin-bottom: 0.6rem; }
+
+        /* ============ STATS ============ */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; }
+
+        .stat-item {
+            text-align: center;
+            padding: 1rem;
+            background: var(--bg);
+            border-radius: 8px;
+        }
+
+        .stat-value { font-size: 1.5rem; font-weight: 700; color: var(--primary); }
+        .stat-value.green { color: var(--success); }
+        .stat-value.purple { color: var(--purple); }
+        .stat-value.orange { color: var(--warning); }
+        .stat-label { font-size: 0.75rem; color: var(--muted); margin-top: 0.2rem; }
+
+        /* ============ STATUS BADGES ============ */
+        .badge {
+            display: inline-block;
+            padding: 0.2rem 0.6rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-primary { background: var(--primary-dim); color: var(--primary); }
+        .badge-success { background: var(--success-dim); color: var(--success); }
+        .badge-warning { background: var(--warning-dim); color: var(--warning); }
+        .badge-danger { background: var(--danger-dim); color: var(--danger); }
+        .badge-purple { background: var(--purple-dim); color: var(--purple); }
+
+        /* ============ PROGRESS ============ */
+        .progress-bar { height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; margin: 0.5rem 0; }
+        .progress-fill { height: 100%; background: var(--primary); transition: width 0.3s; border-radius: 3px; }
+        .progress-fill.green { background: var(--success); }
+
+        /* ============ LISTS ============ */
+        .list-item {
+            background: var(--bg);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+        }
+
+        .list-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; }
+        .list-title { font-weight: 600; font-size: 0.9rem; }
+        .list-meta { font-size: 0.8rem; color: var(--muted); }
+        .list-actions { display: flex; gap: 0.4rem; margin-top: 0.6rem; }
+        .list-actions button { flex: 1; padding: 0.4rem; font-size: 0.8rem; margin: 0; }
+
+        /* ============ SHIPS GRID ============ */
+        .ships-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
+
+        .ship-card {
+            background: var(--surface);
+            border-radius: var(--radius);
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .ship-card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.3); }
+
+        .ship-image { width: 100%; height: 150px; object-fit: cover; background: var(--bg); }
+        .ship-info { padding: 0.75rem; }
+        .ship-name { font-weight: 600; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .ship-meta { font-size: 0.8rem; color: var(--muted); margin-top: 0.2rem; }
+
+        /* ============ DETAIL VIEW ============ */
+        .detail-view { display: none; }
+        .detail-view.active { display: block; }
+        .detail-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+        .detail-image { width: 100%; max-height: 450px; object-fit: contain; background: var(--bg); border-radius: var(--radius); margin-bottom: 1rem; }
+        .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; }
+        .detail-item { background: var(--bg); padding: 0.75rem; border-radius: 8px; }
+        .detail-label { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.15rem; }
+        .detail-value { font-weight: 500; font-size: 0.9rem; }
+
+        /* ============ FILTER BAR ============ */
+        .filter-bar { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; }
+        .filter-bar select, .filter-bar input { width: auto; min-width: 160px; margin: 0; }
+        .filter-bar .count { color: var(--muted); font-size: 0.85rem; margin-left: auto; }
+
+        /* ============ UPLOAD AREA ============ */
+        .upload-area {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 2.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: var(--bg);
+        }
+        .upload-area:hover, .upload-area.dragover {
+            border-color: var(--primary);
+            background: var(--primary-dim);
+        }
+        .upload-area .icon { font-size: 2.5rem; margin-bottom: 0.75rem; }
+        .upload-area .text { color: var(--muted); font-size: 0.9rem; }
+
+        .preview-image {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: var(--radius);
+            margin: 1rem 0;
+            object-fit: contain;
+        }
+
+        /* ============ RESULTS ============ */
+        .result-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.6rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .result-bar:last-child { border-bottom: none; }
+        .result-label { min-width: 130px; font-weight: 500; font-size: 0.9rem; }
+        .result-bar-bg { flex: 1; height: 28px; background: var(--bg); border-radius: 4px; overflow: hidden; position: relative; }
+        .result-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; display: flex; align-items: center; padding: 0 0.5rem; font-size: 0.75rem; font-weight: 600; }
+        .result-pct { min-width: 55px; text-align: right; font-weight: 700; font-size: 0.9rem; }
+
+        /* ============ PAGINATION ============ */
+        .pagination { display: flex; justify-content: center; gap: 0.4rem; margin-top: 1.5rem; }
+        .pagination button { width: auto; padding: 0.4rem 0.8rem; margin: 0; font-size: 0.85rem; }
+        .pagination .current { background: var(--surface2); cursor: default; }
+        .pagination .current:hover { opacity: 1; }
+
+        /* ============ URL LIST ============ */
+        .url-list { background: var(--bg); border-radius: 8px; overflow: hidden; }
+        .url-item { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); }
+        .url-item:last-child { border-bottom: none; }
+        .url-name { font-weight: 600; font-size: 0.9rem; }
+        .url-value { font-size: 0.8rem; color: var(--muted); word-break: break-all; }
+
+        /* ============ CATEGORIES ============ */
+        .categories-list { max-height: 250px; overflow-y: auto; background: var(--bg); border-radius: 8px; padding: 0.75rem; }
+        .category-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
+        .category-item:last-child { border-bottom: none; }
+        .category-item input[type="checkbox"] { width: auto; margin: 0; }
+
+        /* ============ HELPERS ============ */
+        .loading { display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 2rem; color: var(--muted); }
+        .spinner { width: 18px; height: 18px; border: 2px solid var(--muted); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .empty { text-align: center; padding: 2rem; color: var(--muted); font-size: 0.9rem; }
+        .mt-1 { margin-top: 0.5rem; }
+        .mt-2 { margin-top: 1rem; }
+        .mb-1 { margin-bottom: 0.5rem; }
+        .mb-2 { margin-bottom: 1rem; }
+        .text-muted { color: var(--muted); }
+        .text-sm { font-size: 0.85rem; }
+        .hidden { display: none; }
+
+        /* ============ CHART (simple CSS bar chart) ============ */
+        .bar-chart { display: flex; flex-direction: column; gap: 0.4rem; }
+        .bar-row { display: flex; align-items: center; gap: 0.5rem; }
+        .bar-label { min-width: 120px; font-size: 0.8rem; text-align: right; color: var(--muted); }
+        .bar-track { flex: 1; height: 20px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+        .bar-value { height: 100%; background: var(--primary); border-radius: 4px; min-width: 2px; }
+        .bar-count { min-width: 40px; font-size: 0.8rem; font-weight: 600; }
+
+        /* ============ TOGGLE ============ */
+        .toggle-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0; }
+        .toggle-row input[type="checkbox"] { width: auto; margin: 0; }
+        .toggle-row label { font-size: 0.85rem; cursor: pointer; }
+
+        @media (max-width: 768px) {
+            .header-content { flex-wrap: wrap; gap: 0.5rem; }
+            .tabs { order: 3; width: 100%; }
+            .tab { padding: 0.5rem 0.75rem; font-size: 0.8rem; }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">Ship-Scraper</div>
+            <nav class="tabs">
+                <button class="tab active" data-tab="dashboard">Dashboard</button>
+                <button class="tab" data-tab="scraper">Scraper</button>
+                <button class="tab" data-tab="ships">Schiffe</button>
+                <button class="tab" data-tab="classify">KI-Erkennung</button>
+                <button class="tab" data-tab="training">Training</button>
+                <button class="tab" data-tab="settings">Einstellungen</button>
+            </nav>
+            <div id="vpn-indicator" class="vpn-indicator off">
+                <span class="vpn-dot"></span>
+                <span id="vpn-indicator-text">VPN: Offline</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+
+        <!-- ==================== DASHBOARD ==================== -->
+        <div id="tab-dashboard" class="tab-content active">
+            <div class="card mb-2">
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-jobs">0</div>
+                        <div class="stat-label">Jobs</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value green" id="stat-downloaded">0</div>
+                        <div class="stat-label">Downloads</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value orange" id="stat-pending">0</div>
+                        <div class="stat-label">Ausstehend</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value purple" id="stat-classified">0</div>
+                        <div class="stat-label">Klassifiziert</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-total">0</div>
+                        <div class="stat-label">Gesamt</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid">
+                <div class="card">
+                    <h2>Schiffstypen-Verteilung</h2>
+                    <div id="type-chart" class="bar-chart">
+                        <div class="empty">Noch keine Daten</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Letzte Aktivitaeten</h2>
+                    <div id="recent-jobs">
+                        <div class="empty">Keine Jobs vorhanden</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Quick Actions</h2>
+                <div class="btn-row">
+                    <button onclick="switchTab('scraper')" class="btn-success">Neuer Scraping-Job</button>
+                    <button onclick="switchTab('classify')">Bild klassifizieren</button>
+                    <button onclick="switchTab('ships')" class="btn-secondary">Schiffe ansehen</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== SCRAPER ==================== -->
+        <div id="tab-scraper" class="tab-content">
+            <div class="grid">
+                <!-- VPN Control -->
+                <div class="card">
+                    <h2>VPN-Steuerung (NordVPN)</h2>
+                    <div id="vpn-status-detail" style="margin-bottom:1rem;">
+                        <span class="badge badge-danger">Pruefe...</span>
+                    </div>
+                    <div id="vpn-details" class="text-sm text-muted mb-2"></div>
+
+                    <div class="label">Land:</div>
+                    <select id="vpn-country">
+                        <option value="Germany">Deutschland</option>
+                        <option value="Netherlands">Niederlande</option>
+                        <option value="Switzerland">Schweiz</option>
+                        <option value="United_States">USA</option>
+                        <option value="United_Kingdom">UK</option>
+                        <option value="France">Frankreich</option>
+                        <option value="Sweden">Schweden</option>
+                    </select>
+
+                    <div class="btn-row">
+                        <button onclick="connectVPN()" class="btn-success">Verbinden</button>
+                        <button onclick="disconnectVPN()" class="btn-danger">Trennen</button>
+                    </div>
+                    <button onclick="rotateVPN()" class="btn-warning">IP wechseln</button>
+                </div>
+
+                <!-- New Job -->
+                <div class="card">
+                    <h2>Neuer Scraping-Job</h2>
+
+                    <div class="label">URL der Schiffs-Webseite:</div>
+                    <div class="input-row">
+                        <select id="url-dropdown" onchange="handleURLSelect()">
+                            <option value="">-- URL waehlen --</option>
+                            <option value="__custom__">Neue URL eingeben...</option>
+                        </select>
+                    </div>
+
+                    <div id="custom-url-input" class="hidden">
+                        <input type="url" id="job-url" placeholder="https://example.com/ships/...">
+                    </div>
+
+                    <div class="input-row">
+                        <button onclick="analyzeURL()">Analysieren</button>
+                    </div>
+
+                    <div id="categories-container" class="hidden">
+                        <div class="label">Gefundene Kategorien:</div>
+                        <div class="categories-list" id="categories-list"></div>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;" class="mt-1">
+                        <div>
+                            <div class="label">Max. Bilder:</div>
+                            <input type="number" id="job-limit" value="100" min="1" max="10000">
+                        </div>
+                        <div>
+                            <div class="label">Delay (Sek):</div>
+                            <input type="text" id="job-delay" value="1-5" placeholder="min-max">
+                        </div>
+                    </div>
+
+                    <div class="toggle-row">
+                        <input type="checkbox" id="job-vpn" checked>
+                        <label for="job-vpn">VPN erforderlich</label>
+                    </div>
+
+                    <button onclick="createJob()" class="btn-success mt-1">Job erstellen</button>
+                </div>
+            </div>
+
+            <!-- Jobs List -->
+            <div class="card">
+                <h2>Scraping-Jobs</h2>
+                <div id="jobs-list">
+                    <div class="empty">Keine Jobs vorhanden</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== SHIPS ==================== -->
+        <div id="tab-ships" class="tab-content">
+            <div id="ships-overview">
+                <div class="filter-bar">
+                    <select id="type-filter" onchange="loadShips()">
+                        <option value="">Alle Typen</option>
+                    </select>
+                    <input type="text" id="search-filter" placeholder="Suche (Name, IMO)..." onkeyup="debounceSearch()" style="min-width:200px;">
+                    <span class="count" id="ships-count">0 Schiffe</span>
+                </div>
+
+                <div id="ships-grid" class="ships-grid">
+                    <div class="empty">Keine Schiffe heruntergeladen</div>
+                </div>
+
+                <div id="pagination" class="pagination"></div>
+            </div>
+
+            <div id="ship-detail" class="detail-view">
+                <div class="detail-header">
+                    <button onclick="closeShipDetail()" class="btn-secondary btn-sm">Zurueck</button>
+                    <h2 id="detail-title"></h2>
+                </div>
+                <img id="detail-image" class="detail-image" src="" alt="">
+                <div class="btn-row mb-2">
+                    <button id="btn-classify-ship" onclick="classifyCurrentShip()" class="btn-purple btn-sm">KI-Klassifizierung starten</button>
+                </div>
+                <div id="detail-classification" class="hidden card mb-2">
+                    <h3>KI-Ergebnis</h3>
+                    <div id="detail-class-results"></div>
+                </div>
+                <div id="detail-metadata" class="detail-grid"></div>
+            </div>
+        </div>
+
+        <!-- ==================== KI-ERKENNUNG ==================== -->
+        <div id="tab-classify" class="tab-content">
+            <div class="grid">
+                <div class="card">
+                    <h2>Schiff erkennen lassen</h2>
+                    <p class="text-sm text-muted mb-2">
+                        Lade ein Bild hoch und das KI-Modell sagt dir mit Wahrscheinlichkeit,
+                        um welchen Schiffstyp es sich handelt.
+                    </p>
+
+                    <div id="upload-area" class="upload-area" onclick="document.getElementById('file-input').click()"
+                         ondragover="event.preventDefault();this.classList.add('dragover')"
+                         ondragleave="this.classList.remove('dragover')"
+                         ondrop="handleDrop(event)">
+                        <div class="icon">&#128674;</div>
+                        <div class="text">Bild hierher ziehen oder klicken zum Auswaehlen</div>
+                        <div class="text text-sm mt-1">JPG, PNG, WebP</div>
+                    </div>
+                    <input type="file" id="file-input" accept="image/*" style="display:none" onchange="handleFileSelect(event)">
+
+                    <div id="preview-container" class="hidden" style="text-align:center;">
+                        <img id="preview-image" class="preview-image" src="" alt="Preview">
+                        <div class="mt-1">
+                            <button onclick="classifyUpload()" class="btn-purple">Klassifizieren</button>
+                        </div>
+                    </div>
+
+                    <div id="classify-loading" class="hidden loading">
+                        <div class="spinner"></div> Analysiere Bild...
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Ergebnis</h2>
+                    <div id="classify-results">
+                        <div class="empty">Noch kein Bild analysiert</div>
+                    </div>
+
+                    <div id="classify-history-section" class="mt-2 hidden">
+                        <h3>Letzte Klassifizierungen</h3>
+                        <div id="classify-history"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Modell-Info</h2>
+                <div id="model-info-display" class="detail-grid">
+                    <div class="loading"><div class="spinner"></div> Lade Modell-Info...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== TRAINING ==================== -->
+        <div id="tab-training" class="tab-content">
+            <div class="grid">
+                <div class="card">
+                    <h2>Modell-Training (Fine-Tuning)</h2>
+                    <p class="text-sm text-muted mb-2">
+                        Trainiere das Modell auf eigenen Daten. Erstelle Unterordner pro Schiffstyp
+                        mit Bildern und starte das Training.
+                    </p>
+
+                    <div class="label">Dataset-Verzeichnis:</div>
+                    <input type="text" id="train-dataset" placeholder="Pfad zum Dataset (z.B. C:/data/ships/)">
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;">
+                        <div>
+                            <div class="label">Epochen:</div>
+                            <input type="number" id="train-epochs" value="5" min="1" max="100">
+                        </div>
+                        <div>
+                            <div class="label">Batch Size:</div>
+                            <input type="number" id="train-batch" value="8" min="1" max="64">
+                        </div>
+                        <div>
+                            <div class="label">Learning Rate:</div>
+                            <input type="text" id="train-lr" value="5e-5">
+                        </div>
+                    </div>
+
+                    <button onclick="startTraining()" class="btn-purple mt-1">Training starten</button>
+
+                    <div id="training-status" class="mt-2 hidden">
+                        <div class="label">Status:</div>
+                        <div id="training-message" class="text-sm"></div>
+                        <div class="progress-bar mt-1">
+                            <div id="training-progress" class="progress-fill green" style="width:0%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Synthetische Daten erzeugen</h2>
+                    <p class="text-sm text-muted mb-2">
+                        Erzeuge zusaetzliche Trainingsbilder durch Augmentation
+                        (Rotation, Spiegelung, Farbaenderung etc.)
+                    </p>
+
+                    <div class="label">Quell-Verzeichnis:</div>
+                    <input type="text" id="aug-source" placeholder="Pfad mit Quellbildern">
+
+                    <div class="label">Bilder pro Original:</div>
+                    <input type="number" id="aug-count" value="5" min="1" max="20">
+
+                    <h3 class="mt-1">Augmentationen:</h3>
+                    <div class="toggle-row"><input type="checkbox" id="aug-flip" checked><label for="aug-flip">Horizontale Spiegelung</label></div>
+                    <div class="toggle-row"><input type="checkbox" id="aug-rotate" checked><label for="aug-rotate">Rotation (15 Grad)</label></div>
+                    <div class="toggle-row"><input type="checkbox" id="aug-color" checked><label for="aug-color">Farb-Jitter</label></div>
+                    <div class="toggle-row"><input type="checkbox" id="aug-crop" checked><label for="aug-crop">Random Crop</label></div>
+                    <div class="toggle-row"><input type="checkbox" id="aug-blur" checked><label for="aug-blur">Gaussian Blur</label></div>
+                    <div class="toggle-row"><input type="checkbox" id="aug-perspective" checked><label for="aug-perspective">Perspektive</label></div>
+
+                    <button onclick="startAugmentation()" class="btn-success mt-1">Augmentation starten</button>
+
+                    <div id="augment-status" class="mt-2 hidden">
+                        <div class="label">Status:</div>
+                        <div id="augment-message" class="text-sm"></div>
+                        <div class="progress-bar mt-1">
+                            <div id="augment-progress" class="progress-fill" style="width:0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Verfuegbare Datasets</h2>
+                <div id="datasets-list">
+                    <div class="loading"><div class="spinner"></div> Lade...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== EINSTELLUNGEN ==================== -->
+        <div id="tab-settings" class="tab-content">
+            <div class="grid">
+                <div class="card">
+                    <h2>Vordefinierte URLs</h2>
+                    <p class="text-sm text-muted mb-2">
+                        Diese URLs stehen im Scraper als Dropdown zur Verfuegung.
+                    </p>
+
+                    <div class="url-list" id="urls-list">
+                        <div class="loading"><div class="spinner"></div> Lade...</div>
+                    </div>
+
+                    <div class="mt-2">
+                        <h3>URL hinzufuegen</h3>
+                        <div class="input-row">
+                            <input type="text" id="new-url-name" placeholder="Name" style="flex:0.4">
+                            <input type="url" id="new-url-value" placeholder="https://..." style="flex:1">
+                            <button onclick="addURL()" class="btn-success">Hinzufuegen</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>App-Info</h2>
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <div class="detail-label">Version</div>
+                            <div class="detail-value">1.0.0</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Port</div>
+                            <div class="detail-value">3025</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Datenbank</div>
+                            <div class="detail-value">SQLite</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">ML-Modell</div>
+                            <div class="detail-value">ViT (Vision Transformer)</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Schiffstypen</div>
+                            <div class="detail-value">10 Klassen</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Genauigkeit</div>
+                            <div class="detail-value">99.6%</div>
+                        </div>
+                    </div>
+
+                    <div class="mt-2">
+                        <h3>Datenbank</h3>
+                        <button onclick="if(confirm('Datenbank wirklich zuruecksetzen?'))resetDB()" class="btn-danger btn-sm">DB zuruecksetzen</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        const API = '';
+        let currentPage = 1;
+        let searchTimeout = null;
+        let currentShipId = null;
+
+        // ============ TABS ============
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+        });
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.tab[data-tab="${tabName}"]`).classList.add('active');
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.getElementById('tab-' + tabName).classList.add('active');
+
+            if (tabName === 'ships') loadShips();
+            else if (tabName === 'settings') loadURLs();
+            else if (tabName === 'classify') loadModelInfo();
+            else if (tabName === 'training') loadDatasets();
+            else if (tabName === 'scraper') { loadJobs(); loadURLDropdown(); }
+            else if (tabName === 'dashboard') { loadStats(); loadJobs(); }
+        }
+
+        // ============ VPN ============
+        async function checkVPNStatus() {
+            try {
+                const res = await fetch(`${API}/api/vpn/status`);
+                const data = await res.json();
+                updateVPNUI(data);
+            } catch (e) {
+                updateVPNUI({ connected: false, error: 'Backend nicht erreichbar' });
+            }
+        }
+
+        function updateVPNUI(data) {
+            const ind = document.getElementById('vpn-indicator');
+            const indText = document.getElementById('vpn-indicator-text');
+            const detail = document.getElementById('vpn-status-detail');
+            const details = document.getElementById('vpn-details');
+
+            if (data.connected) {
+                ind.className = 'vpn-indicator on';
+                indText.textContent = `VPN: ${data.country || 'Verbunden'}`;
+                detail.innerHTML = '<span class="badge badge-success">Verbunden</span>';
+                details.innerHTML = `Land: ${data.country || '-'} | IP: ${data.ip || '-'}`;
+            } else {
+                ind.className = 'vpn-indicator off';
+                indText.textContent = 'VPN: Offline';
+                detail.innerHTML = '<span class="badge badge-danger">Nicht verbunden</span>';
+                details.innerHTML = data.error || '';
+            }
+        }
+
+        async function connectVPN() {
+            const country = document.getElementById('vpn-country').value;
+            const res = await fetch(`${API}/api/vpn/connect`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ country })
+            });
+            updateVPNUI(await res.json());
+        }
+
+        async function disconnectVPN() {
+            await fetch(`${API}/api/vpn/disconnect`, { method: 'POST' });
+            checkVPNStatus();
+        }
+
+        async function rotateVPN() {
+            await fetch(`${API}/api/vpn/rotate`, { method: 'POST' });
+            checkVPNStatus();
+        }
+
+        // ============ URL DROPDOWN ============
+        async function loadURLDropdown() {
+            try {
+                const res = await fetch(`${API}/api/urls`);
+                const urls = await res.json();
+                const dd = document.getElementById('url-dropdown');
+                dd.innerHTML = '<option value="">-- URL waehlen --</option><option value="__custom__">Neue URL eingeben...</option>';
+                urls.forEach(u => { dd.innerHTML += `<option value="${u.url}">${u.name}</option>`; });
+            } catch (e) {}
+        }
+
+        function handleURLSelect() {
+            const dd = document.getElementById('url-dropdown');
+            const ci = document.getElementById('custom-url-input');
+            if (dd.value === '__custom__') { ci.classList.remove('hidden'); document.getElementById('job-url').focus(); }
+            else { ci.classList.add('hidden'); }
+        }
+
+        function getSelectedURL() {
+            const dd = document.getElementById('url-dropdown');
+            return dd.value === '__custom__' || dd.value === '' ? document.getElementById('job-url').value : dd.value;
+        }
+
+        // ============ ANALYZE ============
+        async function analyzeURL() {
+            const url = getSelectedURL();
+            if (!url) return alert('Bitte URL auswaehlen oder eingeben');
+            const container = document.getElementById('categories-container');
+            const list = document.getElementById('categories-list');
+            list.innerHTML = '<div class="loading"><div class="spinner"></div>Analysiere...</div>';
+            container.classList.remove('hidden');
+            try {
+                const res = await fetch(`${API}/api/analyze`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                });
+                const data = await res.json();
+                if (data.success && data.categories.length) {
+                    list.innerHTML = data.categories.map((c, i) => `
+                        <div class="category-item">
+                            <input type="checkbox" id="cat-${i}" data-url="${c.url}">
+                            <label for="cat-${i}">${c.name}</label>
+                        </div>
+                    `).join('');
+                } else {
+                    list.innerHTML = `<div class="empty">${data.error || 'Keine Kategorien gefunden.'}</div>`;
+                }
+            } catch (e) {
+                list.innerHTML = `<div class="empty">Fehler: ${e.message}</div>`;
+            }
+        }
+
+        // ============ JOBS ============
+        async function loadJobs() {
+            try {
+                const res = await fetch(`${API}/api/jobs`);
+                const jobs = await res.json();
+                renderJobs(jobs);
+                renderRecentJobs(jobs.slice(0, 5));
+            } catch (e) {}
+        }
+
+        function renderJobs(jobs) {
+            const list = document.getElementById('jobs-list');
+            if (!jobs.length) { list.innerHTML = '<div class="empty">Keine Jobs vorhanden</div>'; return; }
+            list.innerHTML = jobs.map(j => {
+                const pct = j.total_items ? Math.round((j.downloaded / j.total_items) * 100) : 0;
+                return `
+                    <div class="list-item">
+                        <div class="list-header">
+                            <span class="list-title">${j.name || j.url}</span>
+                            <span class="badge badge-${j.status === 'completed' ? 'success' : j.status === 'running' ? 'warning' : j.status === 'failed' ? 'danger' : 'primary'}">${j.status}</span>
+                        </div>
+                        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+                        <div class="list-meta">${j.downloaded}/${j.total_items} Bilder | Limit: ${j.limit_count}</div>
+                        <div class="list-actions">
+                            ${j.status === 'pending' || j.status === 'paused' ? `<button onclick="startJob(${j.id})" class="btn-success">Start</button>` : ''}
+                            ${j.status === 'running' ? `<button onclick="pauseJob(${j.id})" class="btn-warning">Pause</button>` : ''}
+                            <button onclick="deleteJob(${j.id})" class="btn-danger">Loeschen</button>
+                        </div>
+                    </div>`;
+            }).join('');
+        }
+
+        function renderRecentJobs(jobs) {
+            const el = document.getElementById('recent-jobs');
+            if (!jobs.length) { el.innerHTML = '<div class="empty">Keine Jobs</div>'; return; }
+            el.innerHTML = jobs.map(j => `
+                <div class="list-item" style="padding:0.6rem 0.8rem;margin-bottom:0.3rem;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span class="text-sm">${j.name || j.url}</span>
+                        <span class="badge badge-${j.status === 'completed' ? 'success' : j.status === 'running' ? 'warning' : 'primary'}">${j.status}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function createJob() {
+            const url = getSelectedURL();
+            const limit = parseInt(document.getElementById('job-limit').value) || 100;
+            const delayStr = document.getElementById('job-delay').value;
+            const vpnRequired = document.getElementById('job-vpn').checked;
+            if (!url) return alert('Bitte URL auswaehlen oder eingeben');
+            const [delayMin, delayMax] = delayStr.split('-').map(s => parseFloat(s.trim()) || 1);
+            try {
+                const res = await fetch(`${API}/api/jobs`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, limit, delay_min: delayMin, delay_max: delayMax || delayMin + 2, vpn_required: vpnRequired })
+                });
+                if (res.ok) {
+                    document.getElementById('url-dropdown').value = '';
+                    document.getElementById('job-url').value = '';
+                    document.getElementById('custom-url-input').classList.add('hidden');
+                    document.getElementById('categories-container').classList.add('hidden');
+                    loadJobs(); loadStats();
+                } else { const err = await res.json(); alert('Fehler: ' + (err.error || 'Unbekannt')); }
+            } catch (e) { alert('Fehler: ' + e.message); }
+        }
+
+        async function startJob(id) {
+            const res = await fetch(`${API}/api/jobs/${id}/start`, { method: 'POST' });
+            if (!res.ok) { const err = await res.json(); alert(err.error || 'Fehler'); }
+            loadJobs();
+        }
+
+        async function pauseJob(id) { await fetch(`${API}/api/jobs/${id}/pause`, { method: 'POST' }); loadJobs(); }
+
+        async function deleteJob(id) {
+            if (!confirm('Job wirklich loeschen?')) return;
+            await fetch(`${API}/api/jobs/${id}/delete`, { method: 'DELETE' });
+            loadJobs(); loadStats();
+        }
+
+        // ============ STATS ============
+        async function loadStats() {
+            try {
+                const res = await fetch(`${API}/api/stats`);
+                const s = await res.json();
+                document.getElementById('stat-jobs').textContent = s.total_jobs;
+                document.getElementById('stat-total').textContent = s.total_items;
+                document.getElementById('stat-downloaded').textContent = s.downloaded;
+                document.getElementById('stat-pending').textContent = s.pending;
+                document.getElementById('stat-classified').textContent = s.classifications;
+
+                const chart = document.getElementById('type-chart');
+                if (s.type_distribution && s.type_distribution.length) {
+                    const max = Math.max(...s.type_distribution.map(t => t.count));
+                    chart.innerHTML = s.type_distribution.map(t => `
+                        <div class="bar-row">
+                            <span class="bar-label">${t.type}</span>
+                            <div class="bar-track"><div class="bar-value" style="width:${(t.count/max*100)}%"></div></div>
+                            <span class="bar-count">${t.count}</span>
+                        </div>
+                    `).join('');
+                } else { chart.innerHTML = '<div class="empty">Noch keine Typ-Daten</div>'; }
+            } catch (e) {}
+        }
+
+        // ============ URLS (SETTINGS) ============
+        async function loadURLs() {
+            try {
+                const res = await fetch(`${API}/api/urls`);
+                renderURLs(await res.json());
+            } catch (e) {}
+        }
+
+        function renderURLs(urls) {
+            const list = document.getElementById('urls-list');
+            if (!urls.length) { list.innerHTML = '<div class="empty">Keine URLs</div>'; return; }
+            list.innerHTML = urls.map(u => `
+                <div class="url-item">
+                    <div>
+                        <div class="url-name">${u.name}</div>
+                        <div class="url-value">${u.url}</div>
+                    </div>
+                    <button onclick="deleteURL(${u.id})" class="btn-danger btn-sm">X</button>
+                </div>
+            `).join('');
+        }
+
+        async function addURL() {
+            const name = document.getElementById('new-url-name').value.trim();
+            const url = document.getElementById('new-url-value').value.trim();
+            if (!url) return alert('Bitte URL eingeben');
+            const res = await fetch(`${API}/api/urls`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, url })
+            });
+            if (res.ok) {
+                document.getElementById('new-url-name').value = '';
+                document.getElementById('new-url-value').value = '';
+                loadURLs(); loadURLDropdown();
+            } else { const err = await res.json(); alert(err.error || 'Fehler'); }
+        }
+
+        async function deleteURL(id) {
+            if (!confirm('URL loeschen?')) return;
+            await fetch(`${API}/api/urls/${id}`, { method: 'DELETE' });
+            loadURLs(); loadURLDropdown();
+        }
+
+        // ============ SHIPS ============
+        function debounceSearch() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => { currentPage = 1; loadShips(); }, 300);
+        }
+
+        async function loadShips() {
+            const type = document.getElementById('type-filter').value;
+            const search = document.getElementById('search-filter').value;
+            try {
+                const res = await fetch(`${API}/api/ships?type=${encodeURIComponent(type)}&search=${encodeURIComponent(search)}&page=${currentPage}`);
+                const data = await res.json();
+                renderShips(data.ships);
+                renderTypeFilter(data.types);
+                renderPagination(data);
+                document.getElementById('ships-count').textContent = `${data.total} Schiff${data.total !== 1 ? 'e' : ''}`;
+            } catch (e) {}
+        }
+
+        function renderTypeFilter(types) {
+            const f = document.getElementById('type-filter');
+            const cur = f.value;
+            f.innerHTML = '<option value="">Alle Typen</option>';
+            types.forEach(t => { f.innerHTML += `<option value="${t}" ${t===cur?'selected':''}>${t}</option>`; });
+        }
+
+        function getImageSrc(ship) {
+            if (!ship.local_path) return '';
+            const p = ship.local_path.replace(/\\/g, '/');
+            const idx = p.indexOf('/downloads/');
+            if (idx >= 0) return p.substring(idx);
+            const parts = p.split('/');
+            return '/downloads/' + parts.slice(-2).join('/');
+        }
+
+        function renderShips(ships) {
+            const grid = document.getElementById('ships-grid');
+            if (!ships.length) { grid.innerHTML = '<div class="empty">Keine Schiffe gefunden</div>'; return; }
+            grid.innerHTML = ships.map(s => {
+                const img = getImageSrc(s);
+                const fallback = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%231e293b' width='100' height='100'/><text y='60' x='30' font-size='40'>&#128674;</text></svg>";
+                return `
+                    <div class="ship-card" onclick="showShipDetail(${s.id})">
+                        <img class="ship-image" src="${img}" alt="${s.ship_name||'Schiff'}" onerror="this.src='${fallback}'">
+                        <div class="ship-info">
+                            <div class="ship-name">${s.ship_name || 'Unbekannt'}</div>
+                            <div class="ship-meta">${s.downloaded_at ? new Date(s.downloaded_at).toLocaleDateString('de-DE') : ''}</div>
+                            ${s.ship_type ? `<span class="badge badge-primary mt-1">${s.ship_type}</span>` : ''}
+                        </div>
+                    </div>`;
+            }).join('');
+        }
+
+        function renderPagination(data) {
+            const p = document.getElementById('pagination');
+            if (data.pages <= 1) { p.innerHTML = ''; return; }
+            let h = '';
+            if (data.page > 1) h += `<button onclick="goToPage(${data.page-1})">Zurueck</button>`;
+            h += `<button class="current">Seite ${data.page} / ${data.pages}</button>`;
+            if (data.page < data.pages) h += `<button onclick="goToPage(${data.page+1})">Weiter</button>`;
+            p.innerHTML = h;
+        }
+
+        function goToPage(p) { currentPage = p; loadShips(); window.scrollTo(0, 0); }
+
+        async function showShipDetail(id) {
+            currentShipId = id;
+            try {
+                const res = await fetch(`${API}/api/ships/${id}`);
+                const ship = await res.json();
+                const img = getImageSrc(ship);
+                document.getElementById('detail-title').textContent = ship.ship_name || 'Schiff Details';
+                document.getElementById('detail-image').src = img;
+                document.getElementById('detail-classification').classList.add('hidden');
+
+                const fields = [
+                    { l: 'Name', v: ship.ship_name },
+                    { l: 'Typ', v: ship.ship_type },
+                    { l: 'IMO', v: ship.imo_number },
+                    { l: 'MMSI', v: ship.mmsi },
+                    { l: 'Quelle', v: ship.source_url ? `<a href="${ship.source_url}" target="_blank" style="color:var(--primary)">Link</a>` : null },
+                    { l: 'Job', v: ship.job_name },
+                    { l: 'Datum', v: ship.downloaded_at ? new Date(ship.downloaded_at).toLocaleString('de-DE') : null },
+                ];
+                if (ship.metadata && typeof ship.metadata === 'object') {
+                    Object.entries(ship.metadata).forEach(([k,v]) => fields.push({l:k, v:String(v)}));
+                }
+                document.getElementById('detail-metadata').innerHTML = fields.filter(f => f.v).map(f => `
+                    <div class="detail-item"><div class="detail-label">${f.l}</div><div class="detail-value">${f.v}</div></div>
+                `).join('');
+
+                document.getElementById('ships-overview').style.display = 'none';
+                document.getElementById('ship-detail').classList.add('active');
+            } catch (e) { alert('Fehler: ' + e.message); }
+        }
+
+        function closeShipDetail() {
+            document.getElementById('ship-detail').classList.remove('active');
+            document.getElementById('ships-overview').style.display = '';
+        }
+
+        async function classifyCurrentShip() {
+            if (!currentShipId) return;
+            const btn = document.getElementById('btn-classify-ship');
+            btn.disabled = true; btn.textContent = 'Analysiere...';
+            try {
+                const res = await fetch(`${API}/api/classify/ship/${currentShipId}`, { method: 'POST' });
+                const data = await res.json();
+                if (data.error) { alert(data.error); return; }
+                const container = document.getElementById('detail-classification');
+                container.classList.remove('hidden');
+                document.getElementById('detail-class-results').innerHTML = renderClassResults(data.predictions);
+            } catch (e) { alert('Fehler: ' + e.message); }
+            btn.disabled = false; btn.textContent = 'KI-Klassifizierung starten';
+        }
+
+        // ============ CLASSIFY (Upload) ============
+        let selectedFile = null;
+
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) showPreview(file);
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) showPreview(file);
+        }
+
+        function showPreview(file) {
+            selectedFile = file;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('preview-image').src = e.target.result;
+                document.getElementById('preview-container').classList.remove('hidden');
+                document.getElementById('upload-area').classList.add('hidden');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function classifyUpload() {
+            if (!selectedFile) return;
+            const loading = document.getElementById('classify-loading');
+            const results = document.getElementById('classify-results');
+            loading.classList.remove('hidden');
+            results.innerHTML = '';
+
+            const formData = new FormData();
+            formData.append('image', selectedFile);
+
+            try {
+                const res = await fetch(`${API}/api/classify`, { method: 'POST', body: formData });
+                const data = await res.json();
+                loading.classList.add('hidden');
+
+                if (data.error) {
+                    results.innerHTML = `<div class="empty" style="color:var(--danger)">${data.error}</div>`;
+                    return;
+                }
+
+                results.innerHTML = renderClassResults(data.predictions);
+                loadClassHistory();
+            } catch (e) {
+                loading.classList.add('hidden');
+                results.innerHTML = `<div class="empty" style="color:var(--danger)">Fehler: ${e.message}</div>`;
+            }
+
+            // Reset for next upload
+            selectedFile = null;
+            document.getElementById('preview-container').classList.add('hidden');
+            document.getElementById('upload-area').classList.remove('hidden');
+            document.getElementById('file-input').value = '';
+        }
+
+        function renderClassResults(predictions) {
+            if (!predictions || !predictions.length) return '<div class="empty">Keine Ergebnisse</div>';
+
+            const colors = ['var(--success)', 'var(--primary)', 'var(--warning)', 'var(--purple)', 'var(--muted)'];
+            return predictions.slice(0, 5).map((p, i) => `
+                <div class="result-bar">
+                    <span class="result-label">${p.label}</span>
+                    <div class="result-bar-bg">
+                        <div class="result-bar-fill" style="width:${p.confidence}%;background:${colors[i]||colors[4]}">${p.confidence > 15 ? p.confidence.toFixed(1) + '%' : ''}</div>
+                    </div>
+                    <span class="result-pct" style="color:${colors[i]||colors[4]}">${p.confidence.toFixed(1)}%</span>
+                </div>
+            `).join('');
+        }
+
+        async function loadClassHistory() {
+            try {
+                const res = await fetch(`${API}/api/classifications?per_page=5`);
+                const data = await res.json();
+                if (data.classifications.length) {
+                    document.getElementById('classify-history-section').classList.remove('hidden');
+                    document.getElementById('classify-history').innerHTML = data.classifications.map(c => `
+                        <div class="list-item" style="padding:0.5rem 0.7rem;margin-bottom:0.3rem;">
+                            <div style="display:flex;justify-content:space-between;">
+                                <span class="text-sm">${c.predicted_type}</span>
+                                <span class="badge badge-success">${c.confidence.toFixed(1)}%</span>
+                            </div>
+                            <div class="text-sm text-muted">${new Date(c.created_at).toLocaleString('de-DE')}</div>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {}
+        }
+
+        // ============ MODEL INFO ============
+        async function loadModelInfo() {
+            try {
+                const res = await fetch(`${API}/api/model/info`);
+                const info = await res.json();
+                document.getElementById('model-info-display').innerHTML = [
+                    { l: 'Name', v: info.name },
+                    { l: 'Architektur', v: info.architecture || 'ViT' },
+                    { l: 'Basis-Modell', v: info.base_model },
+                    { l: 'Genauigkeit', v: info.accuracy },
+                    { l: 'Bildgroesse', v: `${info.image_size}x${info.image_size}px` },
+                    { l: 'Klassen', v: info.num_classes },
+                    { l: 'Labels', v: (info.labels || []).join(', ') },
+                    { l: 'Geladen', v: info.loaded ? 'Ja' : 'Nein' },
+                    { l: 'Checkpoints', v: (info.checkpoints || []).join(', ') || 'Keine' },
+                ].map(f => `<div class="detail-item"><div class="detail-label">${f.l}</div><div class="detail-value">${f.v}</div></div>`).join('');
+            } catch (e) {
+                document.getElementById('model-info-display').innerHTML = '<div class="empty">Modell-Info nicht verfuegbar</div>';
+            }
+        }
+
+        // ============ TRAINING ============
+        async function startTraining() {
+            const dataset = document.getElementById('train-dataset').value.trim();
+            if (!dataset) return alert('Bitte Dataset-Verzeichnis angeben');
+
+            const epochs = parseInt(document.getElementById('train-epochs').value) || 5;
+            const batch = parseInt(document.getElementById('train-batch').value) || 8;
+            const lr = parseFloat(document.getElementById('train-lr').value) || 5e-5;
+
+            document.getElementById('training-status').classList.remove('hidden');
+            document.getElementById('training-message').textContent = 'Starte Training...';
+
+            try {
+                const res = await fetch(`${API}/api/training/start`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ dataset_dir: dataset, epochs, batch_size: batch, learning_rate: lr })
+                });
+                const data = await res.json();
+                if (data.error) { document.getElementById('training-message').textContent = data.error; return; }
+                pollTrainingStatus();
+            } catch (e) { document.getElementById('training-message').textContent = 'Fehler: ' + e.message; }
+        }
+
+        async function pollTrainingStatus() {
+            try {
+                const res = await fetch(`${API}/api/training/status`);
+                const s = await res.json();
+                document.getElementById('training-message').textContent = s.message || 'Laeuft...';
+                document.getElementById('training-progress').style.width = s.progress + '%';
+                if (s.running) setTimeout(pollTrainingStatus, 3000);
+            } catch (e) {}
+        }
+
+        async function loadDatasets() {
+            try {
+                const res = await fetch(`${API}/api/training/datasets`);
+                const datasets = await res.json();
+                const el = document.getElementById('datasets-list');
+                if (!datasets.length) { el.innerHTML = '<div class="empty">Keine Datasets gefunden. Lade Bilder per Scraper herunter.</div>'; return; }
+                el.innerHTML = datasets.map(d => `
+                    <div class="list-item">
+                        <div class="list-header">
+                            <span class="list-title">${d.name}</span>
+                            <span class="badge badge-${d.source === 'augmented' ? 'purple' : 'primary'}">${d.source}</span>
+                        </div>
+                        <div class="list-meta">${d.count} Bilder | ${d.path}</div>
+                    </div>
+                `).join('');
+            } catch (e) { document.getElementById('datasets-list').innerHTML = '<div class="empty">Fehler beim Laden</div>'; }
+        }
+
+        // ============ AUGMENTATION ============
+        async function startAugmentation() {
+            const source = document.getElementById('aug-source').value.trim();
+            if (!source) return alert('Bitte Quell-Verzeichnis angeben');
+
+            const numPerImage = parseInt(document.getElementById('aug-count').value) || 5;
+            const transforms = {
+                horizontal_flip: document.getElementById('aug-flip').checked,
+                rotation: document.getElementById('aug-rotate').checked,
+                color_jitter: document.getElementById('aug-color').checked,
+                random_crop: document.getElementById('aug-crop').checked,
+                gaussian_blur: document.getElementById('aug-blur').checked,
+                perspective: document.getElementById('aug-perspective').checked,
+            };
+
+            document.getElementById('augment-status').classList.remove('hidden');
+            document.getElementById('augment-message').textContent = 'Starte...';
+
+            try {
+                const res = await fetch(`${API}/api/augment`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ source_dir: source, num_per_image: numPerImage, transforms })
+                });
+                const data = await res.json();
+                if (data.error) { document.getElementById('augment-message').textContent = data.error; return; }
+                pollAugmentStatus();
+            } catch (e) { document.getElementById('augment-message').textContent = 'Fehler: ' + e.message; }
+        }
+
+        async function pollAugmentStatus() {
+            try {
+                const res = await fetch(`${API}/api/augment/status`);
+                const s = await res.json();
+                document.getElementById('augment-message').textContent = s.message || 'Laeuft...';
+                const pct = s.total > 0 ? Math.round((s.progress / s.total) * 100) : 0;
+                document.getElementById('augment-progress').style.width = pct + '%';
+                if (s.running) setTimeout(pollAugmentStatus, 2000);
+                else loadDatasets();
+            } catch (e) {}
+        }
+
+        // ============ INIT ============
+        async function init() {
+            checkVPNStatus();
+            loadStats();
+            loadJobs();
+            loadURLDropdown();
+            setInterval(checkVPNStatus, 30000);
+        }
+
+        init();
+    </script>
+</body>
+</html>

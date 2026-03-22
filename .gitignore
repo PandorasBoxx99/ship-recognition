@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Database
+*.db
+
+# Downloads (user data)
+downloads/
+
+# Model weights (too large for git)
+models/ship_classifier/*.safetensors
+models/ship_classifier/*.pt
+models/ship_classifier/*.pth
+models/ship_classifier/*.bin
+models/ship_classifier/checkpoint-*/
+models/ship_classifier/.cache/
+
+# Augmented data
+augmented/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log
+
+# Syncthing conflicts
+*.sync-conflict-*
