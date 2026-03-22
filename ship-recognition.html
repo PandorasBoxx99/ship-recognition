@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ship Recognition Platform</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .container {
+    text-align: center;
+    max-width: 480px;
+    padding: 2rem;
+  }
+  .logo { font-size: 4rem; margin-bottom: 1rem; }
+  h1 { font-size: 1.8rem; font-weight: 600; margin-bottom: 0.5rem; }
+  .subtitle { color: #94a3b8; font-size: 0.95rem; margin-bottom: 2rem; }
+
+  .status-card {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .status-dot {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  .dot-green { background: #22c55e; box-shadow: 0 0 8px #22c55e80; }
+  .dot-red { background: #ef4444; }
+  .dot-yellow { background: #f59e0b; animation: pulse 1.2s ease-in-out infinite; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .status-text {
+    font-size: 1.1rem;
+    font-weight: 500;
+    margin-bottom: 1rem;
+  }
+
+  .status-detail {
+    color: #94a3b8;
+    font-size: 0.85rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 12px 32px;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    text-decoration: none;
+    transition: all 0.2s;
+  }
+  .btn-primary {
+    background: #3b82f6;
+    color: #fff;
+  }
+  .btn-primary:hover { background: #2563eb; transform: translateY(-1px); }
+  .btn-success {
+    background: #22c55e;
+    color: #fff;
+  }
+  .btn-success:hover { background: #16a34a; transform: translateY(-1px); }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 18px; height: 18px;
+    border: 2px solid #ffffff40;
+    border-top: 2px solid #fff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .progress-bar {
+    width: 100%;
+    height: 4px;
+    background: #334155;
+    border-radius: 2px;
+    margin-top: 1rem;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: #3b82f6;
+    border-radius: 2px;
+    animation: loading 2s ease-in-out infinite;
+    width: 30%;
+  }
+  @keyframes loading {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(400%); }
+  }
+
+  .hidden { display: none; }
+  .footer { color: #475569; font-size: 0.75rem; margin-top: 2rem; }
+  .footer a { color: #64748b; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">🚢</div>
+  <h1>Ship Recognition Platform</h1>
+  <p class="subtitle">Schiffserkennung, Klassifizierung & Training</p>
+
+  <div class="status-card">
+    <!-- State: Checking -->
+    <div id="state-checking">
+      <p class="status-text">
+        <span class="status-dot dot-yellow"></span>
+        Prüfe Server-Status...
+      </p>
+      <div class="progress-bar"><div class="progress-fill"></div></div>
+    </div>
+
+    <!-- State: Offline -->
+    <div id="state-offline" class="hidden">
+      <p class="status-text">
+        <span class="status-dot dot-red"></span>
+        Server nicht erreichbar
+      </p>
+      <p class="status-detail">
+        Der Server läuft nicht auf <strong>localhost:3025</strong>
+      </p>
+      <button id="btn-start" class="btn btn-primary" onclick="startServer()">
+        Server starten
+      </button>
+    </div>
+
+    <!-- State: Starting -->
+    <div id="state-starting" class="hidden">
+      <p class="status-text">
+        <span class="spinner"></span>
+        Server wird gestartet...
+      </p>
+      <p class="status-detail" id="start-detail">
+        Bitte warte einen Moment. Die Startdatei wird ausgeführt.
+      </p>
+      <div class="progress-bar"><div class="progress-fill"></div></div>
+    </div>
+
+    <!-- State: Online -->
+    <div id="state-online" class="hidden">
+      <p class="status-text">
+        <span class="status-dot dot-green"></span>
+        Server ist online
+      </p>
+      <p class="status-detail" id="online-detail"></p>
+      <a href="http://localhost:3025" class="btn btn-success" id="btn-open">
+        App öffnen
+      </a>
+    </div>
+  </div>
+
+  <div class="footer">
+    Ship Recognition Platform v2.0 &mdash; Port 3025
+  </div>
+</div>
+
+<script>
+const SERVER = 'http://localhost:3025';
+const CHECK_INTERVAL = 1500;
+let pollTimer = null;
+
+function showState(state) {
+  ['checking', 'offline', 'starting', 'online'].forEach(s => {
+    document.getElementById('state-' + s).classList.toggle('hidden', s !== state);
+  });
+}
+
+async function checkServer() {
+  try {
+    const resp = await fetch(SERVER + '/api/stats', { signal: AbortSignal.timeout(3000) });
+    if (resp.ok) {
+      const data = await resp.json();
+      const detail = document.getElementById('online-detail');
+      detail.textContent =
+        data.total_jobs + ' Jobs, ' +
+        data.downloaded + ' Bilder, ' +
+        data.classifications + ' Klassifikationen';
+      showState('online');
+      stopPolling();
+      return true;
+    }
+  } catch (e) {
+    // Server not reachable
+  }
+  return false;
+}
+
+function startPolling() {
+  if (pollTimer) return;
+  pollTimer = setInterval(async () => {
+    const online = await checkServer();
+    if (online) stopPolling();
+  }, CHECK_INTERVAL);
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function startServer() {
+  showState('starting');
+
+  // Open the batch file — browser will prompt to run it
+  const link = document.createElement('a');
+  link.href = 'start-server.bat';
+  link.click();
+
+  // Start polling for server to come online
+  let attempts = 0;
+  const maxAttempts = 40; // ~60 seconds
+
+  const poll = setInterval(async () => {
+    attempts++;
+    const detail = document.getElementById('start-detail');
+    detail.textContent = 'Warte auf Server... (Versuch ' + attempts + '/' + maxAttempts + ')';
+
+    const online = await checkServer();
+    if (online) {
+      clearInterval(poll);
+    } else if (attempts >= maxAttempts) {
+      clearInterval(poll);
+      detail.textContent = 'Server antwortet nicht. Bitte manuell starten: python run.py';
+      showState('offline');
+    }
+  }, CHECK_INTERVAL);
+}
+
+// Initial check on page load
+(async function init() {
+  showState('checking');
+  const online = await checkServer();
+  if (!online) {
+    showState('offline');
+  }
+})();
+</script>
+</body>
+</html>
