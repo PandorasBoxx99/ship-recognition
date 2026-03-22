@@ -1,12 +1,12 @@
 #!/bin/bash
 # ============================================================
-# Ship-Scraper - One-Click Setup
+# Ship Recognition Platform - Setup Script
 # ============================================================
 
 set -e
 
 echo "========================================"
-echo "  Ship-Scraper Setup"
+echo "  Ship Recognition Platform - Setup"
 echo "========================================"
 echo ""
 
@@ -16,19 +16,29 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# Check Python
+# ---- Check Python ----
 if command -v python3 &> /dev/null; then
     PYTHON=python3
 elif command -v python &> /dev/null; then
     PYTHON=python
 else
-    echo -e "${RED}Python nicht gefunden! Bitte Python 3.8+ installieren.${NC}"
+    echo -e "${RED}Python nicht gefunden! Bitte Python 3.11+ installieren.${NC}"
     exit 1
 fi
 
-echo -e "${GREEN}Python gefunden:${NC} $($PYTHON --version)"
+PY_VERSION=$($PYTHON --version 2>&1)
+echo -e "${GREEN}Python gefunden:${NC} $PY_VERSION"
 
-# Create virtual environment
+# ---- Check Node.js ----
+if command -v node &> /dev/null; then
+    NODE_VERSION=$(node --version 2>&1)
+    echo -e "${GREEN}Node.js gefunden:${NC} $NODE_VERSION"
+else
+    echo -e "${YELLOW}Node.js nicht gefunden. Frontend-Build wird uebersprungen.${NC}"
+    echo -e "${YELLOW}Installiere Node.js 20+ fuer das Frontend: https://nodejs.org${NC}"
+fi
+
+# ---- Create virtual environment ----
 if [ ! -d "venv" ]; then
     echo -e "\n${YELLOW}Erstelle virtuelle Umgebung...${NC}"
     $PYTHON -m venv venv
@@ -42,34 +52,53 @@ elif [ -f "venv/Scripts/activate" ]; then
     source venv/Scripts/activate
 fi
 
-# Install dependencies
-echo -e "\n${YELLOW}Installiere Abhaengigkeiten...${NC}"
-pip install --upgrade pip
-pip install -r requirements.txt
+# ---- Install Python dependencies ----
+echo -e "\n${YELLOW}Installiere Python-Abhaengigkeiten...${NC}"
+pip install --upgrade pip -q
+pip install -e ".[dev]" -q
+echo -e "${GREEN}Python-Pakete installiert.${NC}"
 
-# Create directories
+# ---- Create directories ----
 echo -e "\n${YELLOW}Erstelle Verzeichnisse...${NC}"
-mkdir -p downloads uploads augmented models/ship_classifier
+mkdir -p downloads uploads augmented models/ship_classifier data logs
 
-# Initialize database
+# ---- Create .env if not exists ----
+if [ ! -f ".env" ]; then
+    echo -e "${YELLOW}Erstelle .env aus .env.example...${NC}"
+    cp .env.example .env
+fi
+
+# ---- Initialize / migrate database ----
 echo -e "\n${YELLOW}Initialisiere Datenbank...${NC}"
-$PYTHON -c "
-import sqlite3, os
-with open('schema.sql', 'r') as f:
-    schema = f.read()
-conn = sqlite3.connect('schiffs-scraper.db')
-conn.executescript(schema)
-conn.commit()
-conn.close()
+if [ -f "schiffs-scraper.db" ]; then
+    echo "Vorhandene Datenbank gefunden. Fuehre Migration aus..."
+    $PYTHON scripts/migrate_v1.py 2>/dev/null || true
+fi
+$PYTHON -m alembic upgrade head 2>/dev/null || $PYTHON -c "
+from backend.database import Base, engine, init_db
+import backend.models
+init_db()
 print('Datenbank erstellt.')
 "
 
-# Check if model exists
+# ---- Build Frontend ----
+if command -v node &> /dev/null; then
+    echo -e "\n${YELLOW}Installiere Frontend-Abhaengigkeiten...${NC}"
+    cd frontend
+    npm ci -q 2>/dev/null || npm install -q
+    echo -e "${YELLOW}Baue Frontend...${NC}"
+    npm run build
+    cd ..
+    echo -e "${GREEN}Frontend gebaut.${NC}"
+else
+    echo -e "\n${YELLOW}Frontend-Build uebersprungen (Node.js nicht installiert).${NC}"
+fi
+
+# ---- Download ML model ----
 if [ ! -f "models/ship_classifier/model.safetensors" ]; then
-    echo -e "\n${YELLOW}Lade ML-Modell herunter...${NC}"
+    echo -e "\n${YELLOW}Lade ML-Modell herunter (~350 MB)...${NC}"
     $PYTHON -c "
 from transformers import ViTForImageClassification, ViTImageProcessor
-import os
 
 model_dir = 'models/ship_classifier'
 model_name = 'dima806/10_ship_types_image_detection'
@@ -91,7 +120,8 @@ echo "========================================"
 echo ""
 echo "  Starten mit:"
 echo "    source venv/bin/activate"
-echo "    python app.py"
+echo "    python run.py"
 echo ""
 echo "  Dann oeffnen: http://localhost:3025"
+echo "  API-Docs:     http://localhost:3025/docs"
 echo -e "========================================${NC}"

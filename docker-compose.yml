@@ -1,0 +1,21 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3025:3025"
+    volumes:
+      - ./downloads:/app/downloads
+      - ./uploads:/app/uploads
+      - ./augmented:/app/augmented
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ship-db:/app/db
+    environment:
+      - APP_ENV=production
+      - DATABASE_URL=sqlite:///db/schiffs-scraper.db
+      - VPN_ENABLED=false
+    restart: unless-stopped
+
+volumes:
+  ship-db:
