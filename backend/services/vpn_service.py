@@ -1,25 +1,162 @@
-"""VPN service — wraps NordVPN CLI calls."""
+"""VPN service — NordVPN integration via REST API + CLI fallback.
 
+Uses NordVPN API (api.nordvpn.com) for:
+- Token validation (Basic Auth with token)
+- Server recommendations by country
+- Connection status
+
+Falls back to NordVPN CLI if available.
+"""
+
+import base64
 import subprocess
 import time
 
+import requests
 from sqlalchemy.orm import Session
 
 from backend.config import settings
 from backend.models.vpn import VPNLog
 
+import structlog
+
+log = structlog.get_logger()
+
+NORDVPN_API = "https://api.nordvpn.com"
+
+
+# ============ API-Based Functions ============
+
+def _api_headers(token: str | None = None) -> dict:
+    """Build auth headers for NordVPN API."""
+    api_key = token or settings.VPN_API_KEY
+    if not api_key:
+        return {}
+    # NordVPN API uses Basic Auth: username="token", password=<access_token>
+    credentials = base64.b64encode(f"token:{api_key}".encode()).decode()
+    return {"Authorization": f"Basic {credentials}"}
+
+
+def test_token(token: str | None = None) -> dict:
+    """Validate NordVPN access token via API.
+
+    Calls /v1/users/services/credentials — returns 200 if token is valid.
+    """
+    api_key = token or settings.VPN_API_KEY
+    if not api_key:
+        return {"valid": False, "error": "Kein Access Token konfiguriert"}
+
+    try:
+        resp = requests.get(
+            f"{NORDVPN_API}/v1/users/services/credentials",
+            headers=_api_headers(api_key),
+            timeout=10,
+        )
+
+        if resp.status_code == 200:
+            data = resp.json()
+            return {
+                "valid": True,
+                "message": "Token gueltig — Zugang verifiziert",
+                "username": data.get("username", ""),
+                "nordlynx_private_key": "***" if data.get("nordlynx_private_key") else None,
+            }
+        elif resp.status_code == 401:
+            return {"valid": False, "error": "Token ungueltig oder abgelaufen"}
+        else:
+            return {"valid": False, "error": f"API-Fehler: HTTP {resp.status_code}"}
+
+    except requests.Timeout:
+        return {"valid": False, "error": "Timeout — NordVPN API nicht erreichbar"}
+    except Exception as e:
+        return {"valid": False, "error": str(e)}
+
+
+def get_recommended_servers(country: str = "Germany", limit: int = 5) -> dict:
+    """Get recommended NordVPN servers for a country via API."""
+    # Map country names to NordVPN country IDs
+    country_ids = {
+        "Germany": 81, "Netherlands": 153, "Switzerland": 209,
+        "United States": 228, "United Kingdom": 227,
+        "Sweden": 208, "Austria": 14, "France": 74,
+    }
+    country_id = country_ids.get(country, 81)
+
+    try:
+        resp = requests.get(
+            f"{NORDVPN_API}/v1/servers/recommendations",
+            params={
+                "filters[country_id]": country_id,
+                "filters[servers_technologies][identifier]": "openvpn_udp",
+                "limit": limit,
+            },
+            timeout=10,
+        )
+
+        if resp.status_code == 200:
+            servers = resp.json()
+            return {
+                "country": country,
+                "servers": [
+                    {
+                        "name": s.get("name"),
+                        "hostname": s.get("hostname"),
+                        "load": s.get("load"),
+                        "ip": s.get("station"),
+                    }
+                    for s in servers
+                ],
+            }
+        return {"error": f"API-Fehler: HTTP {resp.status_code}"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ============ CLI-Based Functions (fallback) ============
+
+def _find_nordvpn_binary() -> str | None:
+    """Find NordVPN CLI binary path."""
+    import os
+    import shutil
+
+    # Check configured binary
+    if shutil.which(settings.VPN_BINARY):
+        return settings.VPN_BINARY
+
+    # Windows: check common install paths
+    candidates = [
+        r"C:\Program Files\NordVPN\NordVPN.exe",
+        r"C:\Program Files (x86)\NordVPN\NordVPN.exe",
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+
+    return None
+
 
 def get_vpn_status() -> dict:
-    """Check NordVPN connection status."""
+    """Check VPN connection status (CLI or API-based)."""
     if not settings.VPN_ENABLED:
         return {"connected": False, "error": "VPN disabled in config"}
 
+    binary = _find_nordvpn_binary()
+    if not binary:
+        # No CLI — check via API if token exists
+        if settings.VPN_API_KEY:
+            token_result = test_token()
+            return {
+                "connected": False,
+                "token_valid": token_result.get("valid", False),
+                "error": "NordVPN CLI nicht gefunden. Token-Status: " +
+                         ("gueltig" if token_result.get("valid") else "ungueltig"),
+            }
+        return {"connected": False, "error": "NordVPN CLI nicht gefunden und kein Token konfiguriert"}
+
     try:
         result = subprocess.run(
-            [settings.VPN_BINARY, "status"],
-            capture_output=True,
-            text=True,
-            timeout=10,
+            [binary, "status"],
+            capture_output=True, text=True, timeout=10,
         )
         output = result.stdout
 
@@ -39,45 +176,51 @@ def get_vpn_status() -> dict:
 
 
 def connect_vpn(country: str, db: Session) -> dict:
-    """Connect to VPN and log the action."""
+    """Connect to VPN via CLI."""
     if not settings.VPN_ENABLED:
         return {"connected": False, "error": "VPN disabled in config"}
 
+    binary = _find_nordvpn_binary()
+    if not binary:
+        return {"connected": False, "error": "NordVPN CLI nicht gefunden"}
+
     try:
+        # Login with token first if available
+        if settings.VPN_API_KEY:
+            subprocess.run(
+                [binary, "login", "--token", settings.VPN_API_KEY],
+                capture_output=True, timeout=15,
+            )
+
         subprocess.run(
-            [settings.VPN_BINARY, "connect", country],
-            capture_output=True,
-            timeout=30,
+            [binary, "connect", country],
+            capture_output=True, timeout=30,
         )
         time.sleep(3)
         status = get_vpn_status()
 
-        db.add(
-            VPNLog(
-                action="connect",
-                country=country,
-                ip_address=status.get("ip"),
-                success=status.get("connected", False),
-            )
-        )
+        db.add(VPNLog(
+            action="connect", country=country,
+            ip_address=status.get("ip"),
+            success=status.get("connected", False),
+        ))
         db.commit()
-
         return status
     except Exception as e:
         return {"connected": False, "error": str(e)}
 
 
 def disconnect_vpn(db: Session) -> dict:
-    """Disconnect from VPN and log the action."""
+    """Disconnect from VPN via CLI."""
     if not settings.VPN_ENABLED:
         return {"connected": False, "error": "VPN disabled in config"}
 
+    binary = _find_nordvpn_binary()
+    if not binary:
+        return {"connected": False, "error": "NordVPN CLI nicht gefunden"}
+
     try:
-        subprocess.run(
-            [settings.VPN_BINARY, "disconnect"],
-            capture_output=True,
-            timeout=10,
-        )
+        subprocess.run([binary, "disconnect"], capture_output=True, timeout=10)
         db.add(VPNLog(action="disconnect", success=True))
         db.commit()
         return {"connected": False}
@@ -89,58 +232,5 @@ def rotate_vpn(db: Session) -> dict:
     """Rotate VPN IP (disconnect + reconnect)."""
     disconnect_vpn(db)
     time.sleep(2)
-    return connect_vpn("Germany", db)
-
-
-def test_token(token: str | None = None) -> dict:
-    """Test if a NordVPN access token is valid by attempting login.
-
-    If no token is provided, uses the one from settings.
-    Returns success/error status.
-    """
-    api_key = token or settings.VPN_API_KEY
-    if not api_key:
-        return {"valid": False, "error": "Kein Access Token konfiguriert"}
-
-    try:
-        # First check if nordvpn CLI is available
-        result = subprocess.run(
-            [settings.VPN_BINARY, "--version"],
-            capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode != 0:
-            return {"valid": False, "error": f"NordVPN CLI nicht gefunden ({settings.VPN_BINARY})"}
-
-        # Try to login with the token
-        result = subprocess.run(
-            [settings.VPN_BINARY, "login", "--token", api_key],
-            capture_output=True, text=True, timeout=30,
-        )
-        output = (result.stdout + " " + result.stderr).strip()
-
-        # Check for success indicators
-        if result.returncode == 0 or "already logged in" in output.lower() or "welcome" in output.lower():
-            # After login, check account status
-            account_result = subprocess.run(
-                [settings.VPN_BINARY, "account"],
-                capture_output=True, text=True, timeout=10,
-            )
-            account_info = account_result.stdout.strip()
-
-            return {
-                "valid": True,
-                "message": "Token gueltig — eingeloggt",
-                "account": account_info,
-            }
-        else:
-            return {
-                "valid": False,
-                "error": f"Login fehlgeschlagen: {output}",
-            }
-
-    except FileNotFoundError:
-        return {"valid": False, "error": f"NordVPN CLI nicht installiert ({settings.VPN_BINARY})"}
-    except subprocess.TimeoutExpired:
-        return {"valid": False, "error": "Timeout — NordVPN antwortet nicht"}
-    except Exception as e:
-        return {"valid": False, "error": str(e)}
+    country = settings.VPN_DEFAULT_COUNTRY or "Germany"
+    return connect_vpn(country, db)

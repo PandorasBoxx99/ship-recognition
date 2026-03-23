@@ -34,5 +34,11 @@ def vpn_rotate(db: Session = Depends(get_db)):
 
 @router.post("/test-token")
 def vpn_test_token(token: str = Body("", embed=True)):
-    """Test if a NordVPN access token is valid by attempting login."""
+    """Validate NordVPN access token via NordVPN REST API."""
     return vpn_service.test_token(token if token else None)
+
+
+@router.get("/servers")
+def vpn_servers(country: str = "Germany", limit: int = 5):
+    """Get recommended NordVPN servers for a country via API."""
+    return vpn_service.get_recommended_servers(country, limit)
