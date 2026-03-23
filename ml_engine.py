@@ -138,7 +138,7 @@ def classify_image(image_data):
             label = _model.config.id2label.get(str(idx), SHIP_LABELS.get(idx, f"Class {idx}"))
             results.append({
                 'label': label,
-                'confidence': round(float(prob) * 100, 2)
+                'confidence': round(float(prob), 4)
             })
 
         results.sort(key=lambda x: x['confidence'], reverse=True)
