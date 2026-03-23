@@ -39,45 +39,65 @@ SHIP_LABELS = {
 }
 
 
+_load_error = None
+
+
 def load_model():
     """Load the ViT model and processor. Lazy-loaded on first use."""
-    global _model, _processor, _model_loaded
+    global _model, _processor, _model_loaded, _load_error
 
     if _model_loaded:
         return True
 
+    # Step 1: verify torch works
+    try:
+        import torch
+        # Quick sanity check — this catches DLL/library errors early
+        _ = torch.zeros(1)
+    except (ImportError, OSError) as e:
+        _load_error = (
+            f"PyTorch nicht funktionsfähig: {e}\n"
+            "Fix: python scripts/fix_torch.py\n"
+            "Oder: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu"
+        )
+        print(f"[ML] {_load_error}")
+        return False
+
+    # Step 2: load model
     try:
         from transformers import ViTForImageClassification, ViTImageProcessor
-        import torch
 
         if os.path.exists(os.path.join(MODEL_DIR, 'model.safetensors')):
+            print("[ML] Loading model from local files...")
             _processor = ViTImageProcessor.from_pretrained(MODEL_DIR)
             _model = ViTForImageClassification.from_pretrained(MODEL_DIR)
-            _model.eval()
-            _model_loaded = True
-            print("Ship classifier model loaded from local files")
-            return True
         else:
             # Download from HuggingFace
             model_name = "dima806/10_ship_types_image_detection"
+            print(f"[ML] Downloading model from HuggingFace ({model_name})...")
             _processor = ViTImageProcessor.from_pretrained(model_name)
             _model = ViTForImageClassification.from_pretrained(model_name)
-            _model.eval()
 
-            # Save locally
+            # Save locally for next time
             os.makedirs(MODEL_DIR, exist_ok=True)
             _processor.save_pretrained(MODEL_DIR)
             _model.save_pretrained(MODEL_DIR)
-            _model_loaded = True
-            print("Ship classifier model downloaded and saved")
-            return True
+            print("[ML] Model saved to local cache")
+
+        _model.eval()
+        _model_loaded = True
+        _load_error = None
+        print(f"[ML] Model loaded: {_model.config.num_labels} classes, "
+              f"{sum(p.numel() for p in _model.parameters()) / 1e6:.1f}M params")
+        return True
 
     except ImportError as e:
-        print(f"ML dependencies not installed: {e}")
-        print("Run: pip install torch transformers Pillow")
+        _load_error = f"ML-Pakete fehlen: {e}. Run: pip install torch transformers Pillow"
+        print(f"[ML] {_load_error}")
         return False
     except Exception as e:
-        print(f"Error loading model: {e}")
+        _load_error = f"Modellfehler: {e}"
+        print(f"[ML] {_load_error}")
         return False
 
 
@@ -92,7 +112,7 @@ def classify_image(image_data):
         list of {label, confidence} sorted by confidence desc
     """
     if not load_model():
-        return {'error': 'Model not loaded. Install: pip install torch transformers Pillow'}
+        return {'error': _load_error or 'Model not loaded. Run: python scripts/fix_torch.py'}
 
     import torch
 
@@ -133,14 +153,19 @@ def get_model_info():
     config_path = os.path.join(MODEL_DIR, 'config.json')
     info = {
         'name': 'ViT Ship Classifier',
+        'model_name': 'dima806/10_ship_types_image_detection',
         'base_model': 'google/vit-base-patch16-224-in21k',
         'source': 'dima806/10_ship_types_image_detection',
         'accuracy': '99.6%',
+        'parameters': '85.8M',
         'image_size': 224,
+        'input_size': '224x224 RGB',
         'labels': list(SHIP_LABELS.values()),
+        'num_labels': len(SHIP_LABELS),
         'num_classes': len(SHIP_LABELS),
         'loaded': _model_loaded,
         'model_exists': os.path.exists(os.path.join(MODEL_DIR, 'model.safetensors')),
+        'error': _load_error,
     }
 
     if os.path.exists(config_path):
