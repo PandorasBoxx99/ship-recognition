@@ -24,6 +24,9 @@ interface ChangelogEntry {
   details: string
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const useModelDocs = () => useQuery<any>({ queryKey: ['docs-models'], queryFn: () => axios.get('/api/docs/models').then(r => r.data) })
+
 const usePlan = () =>
   useQuery<PlanData>({
     queryKey: ['docs-plan'],
@@ -51,6 +54,8 @@ const statusLabels: Record<string, string> = {
 export function DokuPage() {
   const { data: plan } = usePlan()
   const { data: changelogData } = useChangelog()
+  const { data: modelDocs } = useModelDocs()
+  const am = modelDocs?.active_model
 
   return (
     <div className="space-y-8">
@@ -73,6 +78,127 @@ export function DokuPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Active Model Details */}
+      {am && (
+        <Card>
+          <h2 className="text-xl font-semibold mb-4">Aktives Modell — {am.short_name}</h2>
+          <div className="grid md:grid-cols-2 gap-6">
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Kenndaten</h3>
+              <div className="space-y-1.5 text-sm">
+                {[
+                  ['Modell', am.name],
+                  ['Architektur', am.architecture],
+                  ['Basis', am.base_model],
+                  ['Parameter', am.parameters],
+                  ['Genauigkeit', am.accuracy],
+                  ['F1-Score', am.f1_score],
+                  ['Testbilder', am.test_samples?.toLocaleString('de-DE')],
+                  ['Trainingsdaten', am.training_dataset],
+                  ['Input', am.input_size],
+                  ['Lizenz', am.license],
+                ].map(([k, v]) => (
+                  <div key={k} className="flex gap-2">
+                    <span className="text-[var(--text-muted)] w-28 flex-shrink-0">{k}:</span>
+                    <span>{v}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2 mt-3">
+                <a href={am.huggingface_url} target="_blank" rel="noopener"
+                  className="text-xs text-[var(--primary)] hover:underline">HuggingFace</a>
+                <a href={am.kaggle_url} target="_blank" rel="noopener"
+                  className="text-xs text-[var(--primary)] hover:underline">Kaggle</a>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Klassen (Precision / Recall)</h3>
+              <div className="space-y-1">
+                {am.classes?.map((c: { name: string; precision: number; recall: number; description: string }) => (
+                  <div key={c.name} className="flex items-center gap-2 text-sm">
+                    <span className="w-36 truncate font-medium">{c.name}</span>
+                    <div className="flex-1 bg-[var(--bg)] rounded-full h-2">
+                      <div className="h-2 rounded-full bg-[var(--success)]"
+                        style={{ width: `${c.precision * 100}%` }} />
+                    </div>
+                    <span className="text-xs font-mono w-20 text-right text-[var(--text-muted)]">
+                      {(c.precision * 100).toFixed(1)}% / {(c.recall * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="grid md:grid-cols-2 gap-4 mt-4">
+            <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3">
+              <h4 className="text-xs font-semibold text-[var(--success)] uppercase mb-1">Stärken</h4>
+              <ul className="text-sm space-y-0.5">
+                {am.strengths?.map((s: string, i: number) => <li key={i} className="text-[var(--text-muted)]">{s}</li>)}
+              </ul>
+            </div>
+            <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3">
+              <h4 className="text-xs font-semibold text-[var(--warning)] uppercase mb-1">Limitierungen</h4>
+              <ul className="text-sm space-y-0.5">
+                {am.limitations?.map((s: string, i: number) => <li key={i} className="text-[var(--text-muted)]">{s}</li>)}
+              </ul>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Alternative Models */}
+      {modelDocs?.alternatives && (
+        <Card>
+          <h2 className="text-xl font-semibold mb-4">Alternative Modelle</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[var(--text-muted)] border-b border-[var(--border)]">
+                  <th className="pb-2 pr-3">Modell</th>
+                  <th className="pb-2 pr-3">Typ</th>
+                  <th className="pb-2 pr-3">Genauigkeit</th>
+                  <th className="pb-2 pr-3">Klassen</th>
+                  <th className="pb-2 pr-3">Vorteile</th>
+                  <th className="pb-2">Nachteile</th>
+                </tr>
+              </thead>
+              <tbody>
+                {modelDocs.alternatives.map((m: { name: string; type: string; accuracy: string; classes: number | string; pros: string; cons: string; url: string }) => (
+                  <tr key={m.name} className="border-b border-[var(--border)]/30">
+                    <td className="py-2 pr-3">
+                      <a href={m.url} target="_blank" rel="noopener" className="text-[var(--primary)] hover:underline">{m.name}</a>
+                    </td>
+                    <td className="py-2 pr-3 text-[var(--text-muted)]">{m.type}</td>
+                    <td className="py-2 pr-3 font-mono">{m.accuracy}</td>
+                    <td className="py-2 pr-3">{m.classes}</td>
+                    <td className="py-2 pr-3 text-xs text-[var(--text-muted)]">{m.pros}</td>
+                    <td className="py-2 text-xs text-[var(--text-muted)]">{m.cons}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* Available Datasets */}
+      {modelDocs?.datasets && (
+        <Card>
+          <h2 className="text-xl font-semibold mb-4">Verfügbare Datasets</h2>
+          <div className="grid md:grid-cols-2 gap-3">
+            {modelDocs.datasets.map((d: { name: string; images: number | string; classes: number | string; types: string; source: string }) => (
+              <div key={d.name} className="bg-[var(--bg)] rounded-lg p-3">
+                <div className="font-medium text-sm">{d.name}</div>
+                <div className="text-xs text-[var(--text-muted)] mt-1">
+                  {d.images} Bilder &middot; {d.classes} Klassen &middot; {d.source}
+                </div>
+                <div className="text-xs text-[var(--text-muted)]">{d.types}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
       )}
 
       {/* Implementation Plan */}
