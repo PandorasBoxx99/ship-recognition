@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install CPU-only PyTorch first (much smaller than CUDA version: ~200MB vs ~2GB)
 RUN pip install --no-cache-dir \
-    torch torchvision \
+    "torch>=2.0.0,<3.0.0" "torchvision>=0.15.0,<1.0.0" \
     --index-url https://download.pytorch.org/whl/cpu
 
 # Install remaining Python dependencies

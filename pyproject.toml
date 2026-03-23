@@ -27,9 +27,10 @@ dependencies = [
     "requests>=2.31.0",
     "beautifulsoup4>=4.12.0",
 
-    # ML / Image Classification
-    "torch>=2.0.0",
-    "torchvision>=0.15.0",
+    # ML / Image Classification (install CPU-only if DLL issues:
+    # pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu)
+    "torch>=2.0.0,<3.0.0",
+    "torchvision>=0.15.0,<1.0.0",
     "transformers>=4.36.0",
     "Pillow>=10.0.0",
     "safetensors>=0.4.0",
