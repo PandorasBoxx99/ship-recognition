@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     # VPN
     VPN_ENABLED: bool = True
     VPN_BINARY: str = "nordvpn"
+    VPN_PROVIDER: str = "nordvpn"
+    VPN_USER: str = ""
+    VPN_API_KEY: str = ""
+    VPN_DEFAULT_COUNTRY: str = "Germany"
+    VPN_AUTO_CONNECT: bool = True
+    VPN_ROTATION: str = "manual"  # manual, per_job, every_50, every_100
 
     # CORS
     CORS_ORIGINS: list[str] = [

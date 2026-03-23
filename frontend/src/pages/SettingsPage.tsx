@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useQuery, useMutation } from '@tanstack/react-query'
+import axios from 'axios'
 import { useUrls, useAddUrl, useDeleteUrl, useModelInfo } from '@/hooks/useApi.ts'
 import { Card } from '@/components/ui/Card.tsx'
 import { Button } from '@/components/ui/Button.tsx'
@@ -22,11 +24,34 @@ export function SettingsPage() {
   const [newUrl, setNewUrl] = useState('')
   const [newName, setNewName] = useState('')
 
-  // VPN settings (local state — could be persisted via API later)
+  // VPN settings — loaded from API, saved to .env
   const [vpnUser, setVpnUser] = useState('')
   const [vpnApiKey, setVpnApiKey] = useState('')
   const [vpnProvider, setVpnProvider] = useState('nordvpn')
   const [vpnAutoConnect, setVpnAutoConnect] = useState(true)
+  const [vpnCountry, setVpnCountry] = useState('Germany')
+  const [vpnRotation, setVpnRotation] = useState('manual')
+  const [vpnSaveMsg, setVpnSaveMsg] = useState('')
+
+  const { data: vpnSettings } = useQuery({
+    queryKey: ['vpn-settings'],
+    queryFn: () => axios.get('/api/settings/vpn').then(r => r.data),
+  })
+
+  const saveVpn = useMutation({
+    mutationFn: (data: Record<string, unknown>) => axios.put('/api/settings/vpn', data).then(r => r.data),
+    onSuccess: () => { setVpnSaveMsg('Gespeichert!'); setTimeout(() => setVpnSaveMsg(''), 3000) },
+  })
+
+  useEffect(() => {
+    if (vpnSettings) {
+      setVpnProvider(vpnSettings.vpn_provider ?? 'nordvpn')
+      setVpnUser(vpnSettings.vpn_user ?? '')
+      setVpnAutoConnect(vpnSettings.vpn_auto_connect ?? true)
+      setVpnCountry(vpnSettings.vpn_default_country ?? 'Germany')
+      setVpnRotation(vpnSettings.vpn_rotation ?? 'manual')
+    }
+  }, [vpnSettings])
 
   // Training settings
   const [defaultEpochs, setDefaultEpochs] = useState(5)
@@ -115,12 +140,20 @@ export function SettingsPage() {
                   />
                 </div>
               </div>
-              <div className="flex gap-2">
-                <Button size="sm">Speichern</Button>
+              <div className="flex gap-2 items-center">
+                <Button size="sm" onClick={() => saveVpn.mutate({
+                  vpn_provider: vpnProvider,
+                  vpn_user: vpnUser,
+                  vpn_api_key: vpnApiKey || undefined,
+                  vpn_auto_connect: vpnAutoConnect,
+                })} disabled={saveVpn.isPending}>
+                  {saveVpn.isPending ? 'Speichere...' : 'Speichern'}
+                </Button>
                 <Button size="sm" variant="ghost">Verbindung testen</Button>
+                {vpnSaveMsg && <span className="text-xs text-[var(--success)]">{vpnSaveMsg}</span>}
               </div>
               <p className="text-xs text-[var(--text-muted)]">
-                NordVPN CLI muss installiert und eingeloggt sein. Die Zugangsdaten werden lokal gespeichert.
+                NordVPN CLI muss installiert und eingeloggt sein. Zugangsdaten werden in .env gespeichert.
               </p>
             </div>
           </Card>
@@ -130,18 +163,20 @@ export function SettingsPage() {
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <label className="text-xs text-[var(--text-muted)] block mb-1">Standard-Land</label>
-                <select defaultValue="Germany"
+                <select value={vpnCountry} onChange={(e) => setVpnCountry(e.target.value)}
                   className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm">
                   <option>Germany</option>
                   <option>Netherlands</option>
                   <option>Switzerland</option>
                   <option>United States</option>
                   <option>United Kingdom</option>
+                  <option>Sweden</option>
+                  <option>Austria</option>
                 </select>
               </div>
               <div>
                 <label className="text-xs text-[var(--text-muted)] block mb-1">IP-Rotation</label>
-                <select defaultValue="manual"
+                <select value={vpnRotation} onChange={(e) => setVpnRotation(e.target.value)}
                   className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm">
                   <option value="manual">Manuell</option>
                   <option value="per_job">Pro Job</option>
@@ -149,6 +184,12 @@ export function SettingsPage() {
                   <option value="every_100">Alle 100 Downloads</option>
                 </select>
               </div>
+            </div>
+            <div className="mt-4">
+              <Button size="sm" onClick={() => saveVpn.mutate({
+                vpn_default_country: vpnCountry,
+                vpn_rotation: vpnRotation,
+              })} disabled={saveVpn.isPending}>Speichern</Button>
             </div>
           </Card>
         </div>
