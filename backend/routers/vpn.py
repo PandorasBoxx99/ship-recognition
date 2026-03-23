@@ -30,3 +30,9 @@ def vpn_disconnect(db: Session = Depends(get_db)):
 @router.post("/rotate")
 def vpn_rotate(db: Session = Depends(get_db)):
     return vpn_service.rotate_vpn(db)
+
+
+@router.post("/test-token")
+def vpn_test_token(token: str = Body("", embed=True)):
+    """Test if a NordVPN access token is valid by attempting login."""
+    return vpn_service.test_token(token if token else None)

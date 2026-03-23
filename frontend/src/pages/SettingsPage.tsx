@@ -128,20 +128,19 @@ export function SettingsPage() {
                   setVpnTesting(true)
                   setVpnTestResult(null)
                   try {
-                    const res = await axios.get('/api/vpn/status')
-                    if (res.data.connected) {
+                    // Send token to test endpoint — uses saved token if field is empty
+                    const res = await axios.post('/api/vpn/test-token', { token: vpnApiKey || '' })
+                    if (res.data.valid) {
                       setVpnTestResult('success')
-                      showToast('success', `VPN verbunden: ${res.data.country ?? 'Unbekannt'} (${res.data.ip ?? ''})`)
-                    } else if (res.data.error) {
-                      setVpnTestResult('error')
-                      showToast('error', `VPN-Fehler: ${res.data.error}`)
+                      showToast('success', res.data.message || 'Token gueltig')
                     } else {
                       setVpnTestResult('error')
-                      showToast('error', 'VPN nicht verbunden — Token prüfen oder nordvpn login ausführen')
+                      showToast('error', res.data.error || 'Token ungueltig')
                     }
-                  } catch {
+                  } catch (e: unknown) {
                     setVpnTestResult('error')
-                    showToast('error', 'VPN-Test fehlgeschlagen: Server nicht erreichbar')
+                    const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+                    showToast('error', msg || 'Token-Test fehlgeschlagen')
                   }
                   setVpnTesting(false)
                   setTimeout(() => setVpnTestResult(null), 5000)

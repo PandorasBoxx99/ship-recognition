@@ -15,7 +15,7 @@ services:
       - APP_ENV=production
       - DATABASE_URL=sqlite:///db/schiffs-scraper.db
       - VPN_ENABLED=false
-    restart: unless-stopped
+    restart: always
 
 volumes:
   ship-db:
