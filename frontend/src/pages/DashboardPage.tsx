@@ -1,5 +1,5 @@
+import { useNavigate } from 'react-router-dom'
 import { useStats, useJobs } from '@/hooks/useApi.ts'
-import { useUIStore } from '@/stores/uiStore.ts'
 import { MetricCard } from '@/components/ui/Card.tsx'
 import { Card } from '@/components/ui/Card.tsx'
 import { StatusBadge } from '@/components/ui/Badge.tsx'
@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/Button.tsx'
 export function DashboardPage() {
   const { data: stats } = useStats()
   const { data: jobs } = useJobs()
-  const setActiveTab = useUIStore((s) => s.setActiveTab)
+  const navigate = useNavigate()
 
   const recentJobs = jobs?.slice(0, 5) ?? []
 
@@ -80,9 +80,9 @@ export function DashboardPage() {
       <Card>
         <h2 className="text-lg font-semibold mb-3">Schnellzugriff</h2>
         <div className="flex flex-wrap gap-3">
-          <Button onClick={() => setActiveTab('scraper')}>Neuer Scraper-Job</Button>
-          <Button variant="success" onClick={() => setActiveTab('classify')}>Bild klassifizieren</Button>
-          <Button variant="ghost" onClick={() => setActiveTab('ships')}>Schiffe ansehen</Button>
+          <Button onClick={() => navigate('/Scraper')}>Neuer Scraper-Job</Button>
+          <Button variant="success" onClick={() => navigate('/KI-Erkennung')}>Bild klassifizieren</Button>
+          <Button variant="ghost" onClick={() => navigate('/Schiffe')}>Schiffe ansehen</Button>
         </div>
       </Card>
     </div>
