@@ -26,15 +26,13 @@ export function SettingsPage() {
   const [newName, setNewName] = useState('')
 
   // VPN settings — loaded from API, saved to .env
-  const [vpnUser, setVpnUser] = useState('')
   const [vpnApiKey, setVpnApiKey] = useState('')
-  const [vpnProvider, setVpnProvider] = useState('nordvpn')
   const [vpnAutoConnect, setVpnAutoConnect] = useState(true)
   const [vpnCountry, setVpnCountry] = useState('Germany')
   const [vpnRotation, setVpnRotation] = useState('manual')
-  const [vpnSaveMsg, setVpnSaveMsg] = useState('')
   const [vpnTesting, setVpnTesting] = useState(false)
   const [vpnTestResult, setVpnTestResult] = useState<'success' | 'error' | null>(null)
+  const [vpnTokenVisible, setVpnTokenVisible] = useState(false)
 
   const { data: vpnSettings } = useQuery({
     queryKey: ['vpn-settings'],
@@ -43,13 +41,11 @@ export function SettingsPage() {
 
   const saveVpn = useMutation({
     mutationFn: (data: Record<string, unknown>) => axios.put('/api/settings/vpn', data).then(r => r.data),
-    onSuccess: () => { setVpnSaveMsg('Gespeichert!'); setTimeout(() => setVpnSaveMsg(''), 3000) },
+    onSuccess: () => showToast('success', 'VPN-Einstellungen gespeichert'),
   })
 
   useEffect(() => {
     if (vpnSettings) {
-      setVpnProvider(vpnSettings.vpn_provider ?? 'nordvpn')
-      setVpnUser(vpnSettings.vpn_user ?? '')
       setVpnAutoConnect(vpnSettings.vpn_auto_connect ?? true)
       setVpnCountry(vpnSettings.vpn_default_country ?? 'Germany')
       setVpnRotation(vpnSettings.vpn_rotation ?? 'manual')
@@ -94,63 +90,39 @@ export function SettingsPage() {
       {activeSection === 'vpn' && (
         <div className="space-y-6">
           <Card>
-            <h2 className="text-lg font-semibold mb-4">VPN-Konfiguration (NordVPN)</h2>
+            <h2 className="text-lg font-semibold mb-4">NordVPN — Access Token</h2>
             <div className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs text-[var(--text-muted)] block mb-1">VPN-Provider</label>
-                  <select
-                    value={vpnProvider}
-                    onChange={(e) => setVpnProvider(e.target.value)}
-                    className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm"
-                  >
-                    <option value="nordvpn">NordVPN</option>
-                    <option value="expressvpn">ExpressVPN</option>
-                    <option value="surfshark">Surfshark</option>
-                    <option value="custom">Benutzerdefiniert</option>
-                  </select>
-                </div>
-                <div className="flex items-end">
-                  <label className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={vpnAutoConnect}
-                      onChange={(e) => setVpnAutoConnect(e.target.checked)}
-                    />
-                    Automatisch verbinden bei Scraper-Jobs
-                  </label>
-                </div>
-              </div>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs text-[var(--text-muted)] block mb-1">Benutzername / E-Mail</label>
+              <div>
+                <label className="text-xs text-[var(--text-muted)] block mb-1">Access Token</label>
+                <div className="flex gap-2">
                   <input
-                    type="text"
-                    value={vpnUser}
-                    onChange={(e) => setVpnUser(e.target.value)}
-                    placeholder="vpn@example.com"
-                    className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-[var(--text-muted)] block mb-1">Access Token</label>
-                  <input
-                    type="password"
+                    type={vpnTokenVisible ? 'text' : 'password'}
                     value={vpnApiKey}
                     onChange={(e) => setVpnApiKey(e.target.value)}
-                    placeholder="NordVPN Access Token..."
-                    className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm font-mono"
+                    placeholder={vpnSettings?.vpn_api_key === '***' ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022 Token gespeichert' : 'NordVPN Access Token eingeben...'}
+                    className="flex-1 bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm font-mono"
                   />
+                  <Button size="sm" variant="ghost" onClick={() => setVpnTokenVisible(!vpnTokenVisible)}>
+                    {vpnTokenVisible ? 'Verbergen' : 'Anzeigen'}
+                  </Button>
                 </div>
+                {vpnSettings?.vpn_api_key === '***' && !vpnApiKey && (
+                  <p className="text-xs text-[var(--success)] mt-1">{'\u2714'} Token ist gespeichert</p>
+                )}
+                <p className="text-xs text-[var(--text-muted)] mt-1">
+                  Token aus NordVPN Account: my.nordaccount.com &rarr; Services &rarr; NordVPN &rarr; Access Token
+                </p>
               </div>
+
               <div className="flex gap-2 items-center">
-                <Button size="sm" onClick={() => saveVpn.mutate({
-                  vpn_provider: vpnProvider,
-                  vpn_user: vpnUser,
-                  vpn_api_key: vpnApiKey || undefined,
-                  vpn_auto_connect: vpnAutoConnect,
-                })} disabled={saveVpn.isPending}>
-                  {saveVpn.isPending ? 'Speichere...' : 'Speichern'}
+                <Button size="sm" onClick={() => {
+                  if (!vpnApiKey) {
+                    showToast('error', 'Bitte Token eingeben')
+                    return
+                  }
+                  saveVpn.mutate({ vpn_api_key: vpnApiKey })
+                }} disabled={saveVpn.isPending || !vpnApiKey}>
+                  {saveVpn.isPending ? 'Speichere...' : 'Token speichern'}
                 </Button>
                 <Button size="sm" variant="ghost" disabled={vpnTesting} onClick={async () => {
                   setVpnTesting(true)
@@ -160,26 +132,25 @@ export function SettingsPage() {
                     if (res.data.connected) {
                       setVpnTestResult('success')
                       showToast('success', `VPN verbunden: ${res.data.country ?? 'Unbekannt'} (${res.data.ip ?? ''})`)
+                    } else if (res.data.error) {
+                      setVpnTestResult('error')
+                      showToast('error', `VPN-Fehler: ${res.data.error}`)
                     } else {
                       setVpnTestResult('error')
-                      showToast('error', res.data.error || 'VPN nicht verbunden')
+                      showToast('error', 'VPN nicht verbunden — Token prüfen oder nordvpn login ausführen')
                     }
-                  } catch (e) {
+                  } catch {
                     setVpnTestResult('error')
                     showToast('error', 'VPN-Test fehlgeschlagen: Server nicht erreichbar')
                   }
                   setVpnTesting(false)
                   setTimeout(() => setVpnTestResult(null), 5000)
                 }}>
-                  {vpnTesting ? 'Teste...' : 'Verbindung testen'}
+                  {vpnTesting ? 'Teste...' : 'Token testen'}
                 </Button>
-                {vpnTestResult === 'success' && <span className="text-lg text-[var(--success)]">{'\u2714'}</span>}
-                {vpnTestResult === 'error' && <span className="text-lg text-[var(--danger)]">{'\u2718'}</span>}
-                {vpnSaveMsg && <span className="text-xs text-[var(--success)]">{vpnSaveMsg}</span>}
+                {vpnTestResult === 'success' && <span className="text-xl text-[var(--success)]">{'\u2714'}</span>}
+                {vpnTestResult === 'error' && <span className="text-xl text-[var(--danger)]">{'\u2718'}</span>}
               </div>
-              <p className="text-xs text-[var(--text-muted)]">
-                NordVPN CLI muss installiert und eingeloggt sein. Zugangsdaten werden in .env gespeichert.
-              </p>
             </div>
           </Card>
 
@@ -210,11 +181,17 @@ export function SettingsPage() {
                 </select>
               </div>
             </div>
-            <div className="mt-4">
+            <div className="mt-4 flex gap-2 items-center">
               <Button size="sm" onClick={() => saveVpn.mutate({
                 vpn_default_country: vpnCountry,
                 vpn_rotation: vpnRotation,
+                vpn_auto_connect: vpnAutoConnect,
               })} disabled={saveVpn.isPending}>Speichern</Button>
+              <label className="flex items-center gap-2 text-sm cursor-pointer ml-4">
+                <input type="checkbox" checked={vpnAutoConnect}
+                  onChange={(e) => setVpnAutoConnect(e.target.checked)} />
+                Auto-Connect bei Scraper-Jobs
+              </label>
             </div>
           </Card>
         </div>

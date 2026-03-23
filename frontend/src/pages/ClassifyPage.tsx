@@ -4,6 +4,7 @@ import axios from 'axios'
 import { useClassifyUpload, useClassifications, useModelInfo } from '@/hooks/useApi.ts'
 import { Card } from '@/components/ui/Card.tsx'
 import { Button } from '@/components/ui/Button.tsx'
+import { showToast } from '@/components/ui/Toast.tsx'
 import type { Prediction } from '@/types/index.ts'
 
 const COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#a855f7']
@@ -49,8 +50,18 @@ export function ClassifyPage() {
 
   const handleClassify = async () => {
     if (!selectedFile) return
-    const result = await classify.mutateAsync(selectedFile)
-    setPredictions(result.predictions)
+    try {
+      const result = await classify.mutateAsync(selectedFile)
+      setPredictions(result.predictions)
+      if (result.predictions?.length) {
+        showToast('success', `Erkannt: ${result.predictions[0].label} (${(result.predictions[0].confidence * 100).toFixed(1)}%)`)
+      }
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        || (e as Error)?.message || 'Erkennung fehlgeschlagen'
+      showToast('error', msg)
+      setPredictions(null)
+    }
   }
 
   const handleActivateModel = async (modelId: number) => {
