@@ -2,6 +2,7 @@
 
 import json
 import os
+from datetime import datetime
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -54,9 +55,21 @@ def create_job(req: JobCreateRequest, db: Session = Depends(get_db)):
     db.flush()
 
     images = find_images(req.url, limit=req.limit)
+    added = 0
+    skipped = 0
+
     for img in images:
+        image_url = img["url"]
+
+        # Duplicate check: skip if same image_url already exists in DB
+        existing = db.query(Item).filter(Item.image_url == image_url).first()
+        if existing:
+            skipped += 1
+            continue
+
         # Build metadata JSON from scraped details
-        meta = {}
+        source_domain = urlparse(req.url).netloc.replace("www.", "")
+        meta = {"source": source_domain, "scraped_at": datetime.now().isoformat()}
         for key in ["vessel_url", "photo_id", "flag", "year_built", "length",
                      "beam", "gross_tonnage", "dwt"]:
             if key in img:
@@ -66,20 +79,23 @@ def create_job(req: JobCreateRequest, db: Session = Depends(get_db)):
             Item(
                 job_id=job.id,
                 source_url=img.get("source_page", img.get("vessel_url", "")),
-                image_url=img["url"],
+                image_url=image_url,
                 ship_name=img.get("alt", ""),
                 ship_type=img.get("ship_type", ""),
                 imo_number=img.get("imo", ""),
                 mmsi=img.get("mmsi", ""),
-                metadata_=json.dumps(meta) if meta else None,
+                metadata_=json.dumps(meta),
             )
         )
+        added += 1
 
-    job.total_items = len(images)
+    job.total_items = added
     db.commit()
     db.refresh(job)
 
-    return _job_to_dict(job)
+    result = _job_to_dict(job)
+    result["skipped_duplicates"] = skipped
+    return result
 
 
 @router.get("/jobs/{job_id}")
