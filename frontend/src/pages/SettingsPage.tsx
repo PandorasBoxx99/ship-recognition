@@ -4,6 +4,7 @@ import axios from 'axios'
 import { useUrls, useAddUrl, useDeleteUrl, useModelInfo } from '@/hooks/useApi.ts'
 import { Card } from '@/components/ui/Card.tsx'
 import { Button } from '@/components/ui/Button.tsx'
+import { showToast } from '@/components/ui/Toast.tsx'
 
 type Section = 'vpn' | 'scraper' | 'modell' | 'system'
 
@@ -32,6 +33,8 @@ export function SettingsPage() {
   const [vpnCountry, setVpnCountry] = useState('Germany')
   const [vpnRotation, setVpnRotation] = useState('manual')
   const [vpnSaveMsg, setVpnSaveMsg] = useState('')
+  const [vpnTesting, setVpnTesting] = useState(false)
+  const [vpnTestResult, setVpnTestResult] = useState<'success' | 'error' | null>(null)
 
   const { data: vpnSettings } = useQuery({
     queryKey: ['vpn-settings'],
@@ -130,13 +133,13 @@ export function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-[var(--text-muted)] block mb-1">API-Key / Token</label>
+                  <label className="text-xs text-[var(--text-muted)] block mb-1">Access Token</label>
                   <input
                     type="password"
                     value={vpnApiKey}
                     onChange={(e) => setVpnApiKey(e.target.value)}
-                    placeholder="API-Key eingeben..."
-                    className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm"
+                    placeholder="NordVPN Access Token..."
+                    className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm font-mono"
                   />
                 </div>
               </div>
@@ -149,7 +152,29 @@ export function SettingsPage() {
                 })} disabled={saveVpn.isPending}>
                   {saveVpn.isPending ? 'Speichere...' : 'Speichern'}
                 </Button>
-                <Button size="sm" variant="ghost">Verbindung testen</Button>
+                <Button size="sm" variant="ghost" disabled={vpnTesting} onClick={async () => {
+                  setVpnTesting(true)
+                  setVpnTestResult(null)
+                  try {
+                    const res = await axios.get('/api/vpn/status')
+                    if (res.data.connected) {
+                      setVpnTestResult('success')
+                      showToast('success', `VPN verbunden: ${res.data.country ?? 'Unbekannt'} (${res.data.ip ?? ''})`)
+                    } else {
+                      setVpnTestResult('error')
+                      showToast('error', res.data.error || 'VPN nicht verbunden')
+                    }
+                  } catch (e) {
+                    setVpnTestResult('error')
+                    showToast('error', 'VPN-Test fehlgeschlagen: Server nicht erreichbar')
+                  }
+                  setVpnTesting(false)
+                  setTimeout(() => setVpnTestResult(null), 5000)
+                }}>
+                  {vpnTesting ? 'Teste...' : 'Verbindung testen'}
+                </Button>
+                {vpnTestResult === 'success' && <span className="text-lg text-[var(--success)]">{'\u2714'}</span>}
+                {vpnTestResult === 'error' && <span className="text-lg text-[var(--danger)]">{'\u2718'}</span>}
                 {vpnSaveMsg && <span className="text-xs text-[var(--success)]">{vpnSaveMsg}</span>}
               </div>
               <p className="text-xs text-[var(--text-muted)]">

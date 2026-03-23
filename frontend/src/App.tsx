@@ -8,6 +8,7 @@ import { ClassifyPage } from '@/pages/ClassifyPage.tsx'
 import { TrainingPage } from '@/pages/TrainingPage.tsx'
 import { SettingsPage } from '@/pages/SettingsPage.tsx'
 import { DokuPage } from '@/pages/DokuPage.tsx'
+import { ToastContainer } from '@/components/ui/Toast.tsx'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,6 +24,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <div className="min-h-screen">
+          <ToastContainer />
           <Header />
           <main className="max-w-7xl mx-auto px-4 py-6">
             <Routes>
