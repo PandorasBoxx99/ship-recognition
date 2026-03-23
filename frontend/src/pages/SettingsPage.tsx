@@ -3,10 +3,11 @@ import { useUrls, useAddUrl, useDeleteUrl, useModelInfo } from '@/hooks/useApi.t
 import { Card } from '@/components/ui/Card.tsx'
 import { Button } from '@/components/ui/Button.tsx'
 
-type Section = 'scraper' | 'modell' | 'system'
+type Section = 'vpn' | 'scraper' | 'modell' | 'system'
 
 const sections: { id: Section; label: string }[] = [
-  { id: 'scraper', label: 'Scraper & VPN' },
+  { id: 'vpn', label: 'VPN' },
+  { id: 'scraper', label: 'Scraper-Quellen' },
   { id: 'modell', label: 'Modell & Training' },
   { id: 'system', label: 'System & App' },
 ]
@@ -17,7 +18,7 @@ export function SettingsPage() {
   const deleteUrl = useDeleteUrl()
   const { data: modelInfo } = useModelInfo()
 
-  const [activeSection, setActiveSection] = useState<Section>('scraper')
+  const [activeSection, setActiveSection] = useState<Section>('vpn')
   const [newUrl, setNewUrl] = useState('')
   const [newName, setNewName] = useState('')
 
@@ -61,10 +62,9 @@ export function SettingsPage() {
         ))}
       </div>
 
-      {/* ===== SCRAPER & VPN ===== */}
-      {activeSection === 'scraper' && (
+      {/* ===== VPN ===== */}
+      {activeSection === 'vpn' && (
         <div className="space-y-6">
-          {/* VPN / NordVPN */}
           <Card>
             <h2 className="text-lg font-semibold mb-4">VPN-Konfiguration (NordVPN)</h2>
             <div className="space-y-4">
@@ -125,9 +125,40 @@ export function SettingsPage() {
             </div>
           </Card>
 
-          {/* Scraper-Quellen */}
           <Card>
-            <h2 className="text-lg font-semibold mb-4">Scraper-Quellen</h2>
+            <h2 className="text-lg font-semibold mb-4">Verbindungsoptionen</h2>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-[var(--text-muted)] block mb-1">Standard-Land</label>
+                <select defaultValue="Germany"
+                  className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm">
+                  <option>Germany</option>
+                  <option>Netherlands</option>
+                  <option>Switzerland</option>
+                  <option>United States</option>
+                  <option>United Kingdom</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-[var(--text-muted)] block mb-1">IP-Rotation</label>
+                <select defaultValue="manual"
+                  className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm">
+                  <option value="manual">Manuell</option>
+                  <option value="per_job">Pro Job</option>
+                  <option value="every_50">Alle 50 Downloads</option>
+                  <option value="every_100">Alle 100 Downloads</option>
+                </select>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ===== SCRAPER-QUELLEN ===== */}
+      {activeSection === 'scraper' && (
+        <div className="space-y-6">
+          <Card>
+            <h2 className="text-lg font-semibold mb-4">Registrierte Quellen</h2>
             <div className="space-y-3">
               {urls?.map((u) => (
                 <div key={u.id} className="flex items-center justify-between bg-[var(--bg)] rounded-lg p-3">
@@ -151,7 +182,6 @@ export function SettingsPage() {
             </div>
           </Card>
 
-          {/* Scraper-Defaults */}
           <Card>
             <h2 className="text-lg font-semibold mb-4">Scraper-Standardwerte</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
