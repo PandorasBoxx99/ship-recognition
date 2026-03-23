@@ -1,5 +1,6 @@
 """Scraper and job management endpoints."""
 
+import json
 import os
 from urllib.parse import urlparse
 
@@ -54,12 +55,23 @@ def create_job(req: JobCreateRequest, db: Session = Depends(get_db)):
 
     images = find_images(req.url, limit=req.limit)
     for img in images:
+        # Build metadata JSON from scraped details
+        meta = {}
+        for key in ["vessel_url", "photo_id", "flag", "year_built", "length",
+                     "beam", "gross_tonnage", "dwt"]:
+            if key in img:
+                meta[key] = img[key]
+
         db.add(
             Item(
                 job_id=job.id,
-                source_url=img["source_page"],
+                source_url=img.get("source_page", img.get("vessel_url", "")),
                 image_url=img["url"],
                 ship_name=img.get("alt", ""),
+                ship_type=img.get("ship_type", ""),
+                imo_number=img.get("imo", ""),
+                mmsi=img.get("mmsi", ""),
+                metadata_=json.dumps(meta) if meta else None,
             )
         )
 

@@ -1,7 +1,9 @@
 """Scraper service — website analysis, image discovery, and download."""
 
+import json
 import os
 import random
+import re
 import threading
 import time
 from datetime import datetime
@@ -107,32 +109,129 @@ def find_images(url: str, limit: int = 100) -> list[dict]:
 
 
 def _find_vesselfinder_images(soup: BeautifulSoup, base_url: str, limit: int) -> list[dict]:
-    """VesselFinder-specific image finder."""
+    """VesselFinder-specific image finder with metadata extraction.
+
+    Finds photos from gallery, then fetches vessel detail pages
+    to extract: ship type, IMO, MMSI, flag, year built, dimensions.
+    """
     images = []
+    seen_vessels: dict[str, dict] = {}  # cache detail lookups by vessel URL
 
     for link in soup.find_all("a", href=True):
         href = link.get("href", "")
         if "/ship-photos/" in href and href.count("/") == 2:
             photo_url = urljoin(base_url, href)
 
+            # Find ship name and detail link
             ship_name = ""
+            vessel_url = ""
             parent = link.find_parent()
             if parent:
-                name_link = parent.find("a", href=lambda h: h and "/vessels/details/" in h)
-                if name_link:
-                    ship_name = name_link.get_text(strip=True)
+                name_el = parent.find("a", class_="ship-name")
+                if not name_el:
+                    name_el = parent.find("a", href=lambda h: h and "/vessels/details/" in h)
+                if name_el:
+                    ship_name = name_el.get_text(strip=True)
+                    vessel_url = urljoin(base_url, name_el.get("href", ""))
 
             photo_id = href.split("/")[-1]
             image_url = f"https://photos.vesselfinder.com/2/{photo_id}.jpg"
 
-            images.append(
-                {"url": image_url, "alt": ship_name, "source_page": photo_url, "photo_id": photo_id}
-            )
+            entry = {
+                "url": image_url,
+                "alt": ship_name,
+                "source_page": photo_url,
+                "photo_id": photo_id,
+                "vessel_url": vessel_url,
+            }
+
+            # Fetch vessel metadata (cached per vessel URL)
+            if vessel_url and vessel_url not in seen_vessels:
+                try:
+                    meta = _fetch_vesselfinder_details(vessel_url)
+                    seen_vessels[vessel_url] = meta
+                    time.sleep(0.5)  # rate limit
+                except Exception as e:
+                    log.warning("vessel_detail_error", url=vessel_url, error=str(e))
+                    seen_vessels[vessel_url] = {}
+
+            if vessel_url in seen_vessels:
+                entry.update(seen_vessels[vessel_url])
+
+            images.append(entry)
 
             if len(images) >= limit:
                 break
 
     return images
+
+
+def _fetch_vesselfinder_details(vessel_url: str) -> dict:
+    """Fetch vessel detail page and extract metadata.
+
+    Returns dict with: ship_type, imo, mmsi, flag, year_built, length, beam, gross_tonnage.
+    """
+    try:
+        resp = _session.get(vessel_url, timeout=15)
+        if resp.status_code != 200:
+            return {}
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+        meta: dict[str, str] = {}
+
+        # H2 often contains "Ship Type, IMO XXXXXXX"
+        h2 = soup.find("h2")
+        if h2:
+            h2_text = h2.get_text(strip=True)
+            # Parse "Oil Products Tanker, IMO 9417531"
+            if "IMO" in h2_text:
+                parts = h2_text.split(",")
+                if len(parts) >= 2:
+                    meta["ship_type"] = parts[0].strip()
+                    imo_match = re.search(r"IMO\s*(\d+)", h2_text)
+                    if imo_match:
+                        meta["imo"] = imo_match.group(1)
+
+        # Extract key-value pairs from detail table
+        for row in soup.find_all("tr"):
+            cells = row.find_all("td")
+            if len(cells) >= 2:
+                label = cells[0].get_text(strip=True)
+                value = cells[1].get_text(strip=True)
+
+                if "IMO" in label and "MMSI" in label:
+                    # "9417531 / 212874000"
+                    parts = value.split("/")
+                    if len(parts) >= 2:
+                        meta["imo"] = parts[0].strip()
+                        meta["mmsi"] = parts[1].strip()
+                elif label == "IMO number":
+                    meta["imo"] = value
+                elif label == "MMSI":
+                    meta["mmsi"] = value
+                elif label == "Ship Type":
+                    meta["ship_type"] = value
+                elif label == "AIS Type":
+                    meta.setdefault("ship_type", value)
+                elif "Flag" in label:
+                    meta["flag"] = value
+                elif label == "Year of Build":
+                    meta["year_built"] = value
+                elif "Length Overall" in label:
+                    meta["length"] = value
+                elif "Beam" in label and "m" in label:
+                    meta["beam"] = value
+                elif "Gross Tonnage" in label:
+                    meta["gross_tonnage"] = value
+                elif "DWT" in label:
+                    meta["dwt"] = value
+
+        log.info("vessel_detail_scraped", url=vessel_url, meta=meta)
+        return meta
+
+    except Exception as e:
+        log.error("vessel_detail_fetch_error", url=vessel_url, error=str(e))
+        return {}
 
 
 def download_image(url: str, save_path: str) -> bool:
