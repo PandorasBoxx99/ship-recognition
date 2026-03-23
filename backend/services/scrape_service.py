@@ -82,7 +82,17 @@ def analyze_website(url: str) -> dict:
 
 
 def find_images(url: str, limit: int = 100) -> list[dict]:
-    """Find ship images on a page."""
+    """Find ship images on a page. Auto-selects scraper strategy per site."""
+
+    # Sites that need headless browser (Cloudflare protected)
+    if "marinetraffic.com" in url or "shipspotting.com" in url:
+        try:
+            from backend.services.browser_scraper import find_marinetraffic_images
+            return find_marinetraffic_images(url, limit)
+        except ImportError:
+            log.warning("playwright_not_available", url=url)
+            return []
+
     try:
         response = _session.get(url, timeout=30)
         soup = BeautifulSoup(response.text, "html.parser")

@@ -46,6 +46,11 @@ dev = [
     "httpx>=0.27.0",
     "ruff>=0.3.0",
 ]
+browser = [
+    # For scraping Cloudflare-protected sites (MarineTraffic, ShipSpotting)
+    # After install: playwright install chromium
+    "playwright>=1.40.0",
+]
 gpu = [
     # Install CUDA-specific torch separately:
     # pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
