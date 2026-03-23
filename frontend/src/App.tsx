@@ -29,7 +29,8 @@ export default function App() {
               <Route path="/Dashboard" element={<DashboardPage />} />
               <Route path="/Scraper" element={<ScraperPage />} />
               <Route path="/Schiffe" element={<ShipsPage />} />
-              <Route path="/KI-Erkennung" element={<ClassifyPage />} />
+              <Route path="/Erkennung" element={<ClassifyPage />} />
+              <Route path="/KI-Erkennung" element={<Navigate to="/Erkennung" replace />} />
               <Route path="/Training" element={<TrainingPage />} />
               <Route path="/Einstellungen" element={<SettingsPage />} />
               <Route path="/Doku" element={<DokuPage />} />

@@ -5,7 +5,7 @@ const tabs = [
   { path: '/Dashboard', label: 'Dashboard' },
   { path: '/Scraper', label: 'Scraper' },
   { path: '/Schiffe', label: 'Schiffe' },
-  { path: '/KI-Erkennung', label: 'KI-Erkennung' },
+  { path: '/Erkennung', label: 'Erkennung' },
   { path: '/Training', label: 'Training' },
   { path: '/Einstellungen', label: 'Einstellungen' },
   { path: '/Doku', label: 'Doku' },

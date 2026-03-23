@@ -81,7 +81,7 @@ export function DashboardPage() {
         <h2 className="text-lg font-semibold mb-3">Schnellzugriff</h2>
         <div className="flex flex-wrap gap-3">
           <Button onClick={() => navigate('/Scraper')}>Neuer Scraper-Job</Button>
-          <Button variant="success" onClick={() => navigate('/KI-Erkennung')}>Bild klassifizieren</Button>
+          <Button variant="success" onClick={() => navigate('/Erkennung')}>Bild klassifizieren</Button>
           <Button variant="ghost" onClick={() => navigate('/Schiffe')}>Schiffe ansehen</Button>
         </div>
       </Card>
