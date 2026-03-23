@@ -7,6 +7,7 @@ import { ShipsPage } from '@/pages/ShipsPage.tsx'
 import { ClassifyPage } from '@/pages/ClassifyPage.tsx'
 import { TrainingPage } from '@/pages/TrainingPage.tsx'
 import { SettingsPage } from '@/pages/SettingsPage.tsx'
+import { DokuPage } from '@/pages/DokuPage.tsx'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,6 +32,7 @@ export default function App() {
               <Route path="/KI-Erkennung" element={<ClassifyPage />} />
               <Route path="/Training" element={<TrainingPage />} />
               <Route path="/Einstellungen" element={<SettingsPage />} />
+              <Route path="/Doku" element={<DokuPage />} />
               <Route path="/" element={<Navigate to="/Dashboard" replace />} />
               <Route path="*" element={<Navigate to="/Dashboard" replace />} />
             </Routes>

@@ -8,6 +8,7 @@ const tabs = [
   { path: '/KI-Erkennung', label: 'KI-Erkennung' },
   { path: '/Training', label: 'Training' },
   { path: '/Einstellungen', label: 'Einstellungen' },
+  { path: '/Doku', label: 'Doku' },
 ]
 
 export function Header() {
