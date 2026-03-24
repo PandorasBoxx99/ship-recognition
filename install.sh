@@ -52,6 +52,12 @@ done
 info "Python gefunden: $PYTHON ($($PYTHON --version 2>&1))"
 
 # Node.js (fuer Frontend-Build)
+# On Windows Git Bash, node/npm may not be in PATH — try common locations
+for np in "/c/Program Files/nodejs" "/c/Program Files (x86)/nodejs" "$APPDATA/nvm/current" "$HOME/AppData/Roaming/nvm/current"; do
+    if [ -d "$np" ] && ! command -v node &>/dev/null; then
+        export PATH="$np:$PATH"
+    fi
+done
 if ! command -v node &>/dev/null; then
     warn "Node.js nicht gefunden. Frontend wird nicht gebaut."
     warn "Installiere Node.js >= $NODE_MIN: https://nodejs.org/"
@@ -83,7 +89,7 @@ elif [ -f "$VENV_DIR/Scripts/activate" ]; then
 else
     error "Kann venv nicht aktivieren."
 fi
-info "venv aktiviert: $(which python)"
+info "venv aktiviert: $(command -v python 2>/dev/null || echo 'python')"
 
 # ---- pip aktualisieren ----
 info "Aktualisiere pip..."
