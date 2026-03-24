@@ -98,7 +98,8 @@ else
     info "venv existiert bereits: $VENV_DIR"
 fi
 
-# venv aktivieren
+# venv aktivieren (save PATH first — venv activate can clobber it on Windows)
+_SAVED_PATH="$PATH"
 if [ -f "$VENV_DIR/bin/activate" ]; then
     source "$VENV_DIR/bin/activate"
 elif [ -f "$VENV_DIR/Scripts/activate" ]; then
@@ -106,6 +107,8 @@ elif [ -f "$VENV_DIR/Scripts/activate" ]; then
 else
     error "Kann venv nicht aktivieren."
 fi
+# Restore essential paths that venv activation may have dropped
+export PATH="$PATH:$_SAVED_PATH"
 info "venv aktiviert: $(command -v python 2>/dev/null || echo 'python')"
 
 # ---- pip aktualisieren ----
