@@ -207,16 +207,14 @@ else
 fi
 
 # ---- Freien Port finden ----
-find_free_port() {
-    local port=$1
-    while python -c "import socket; s=socket.socket(); s.settimeout(0.5); exit(0 if s.connect_ex(('127.0.0.1',$port))==0 else 1)" 2>/dev/null; do
-        warn "Port $port ist belegt"
-        port=$((port + 1))
-    done
-    echo "$port"
-}
-
-PORT=$(find_free_port "$PORT")
+_ORIG_PORT="$PORT"
+while python -c "import socket; s=socket.socket(); s.settimeout(0.5); exit(0 if s.connect_ex(('127.0.0.1',$PORT))==0 else 1)" 2>/dev/null; do
+    warn "Port $PORT ist belegt, versuche naechsten..."
+    PORT=$((PORT + 1))
+done
+if [ "$PORT" != "$_ORIG_PORT" ]; then
+    info "Verwende Port $PORT"
+fi
 
 # ---- Fertig ----
 PROJ_DIR=$(pwd)
@@ -235,7 +233,7 @@ echo -e "${YELLOW}│${NC}   Strg+C                                             
 echo -e "${YELLOW}│${NC}                                                          ${YELLOW}│${NC}"
 echo -e "${YELLOW}│${NC} ${BOLD}Naechstes Mal starten (Windows PowerShell):${NC}              ${YELLOW}│${NC}"
 echo -e "${YELLOW}│${NC}   cd ${PROJ_DIR}  ${YELLOW}│${NC}"
-echo -e "${YELLOW}│${NC}   .\\.venv\\Scripts\\activate                               ${YELLOW}│${NC}"
+echo -e "${YELLOW}│${NC}   .${YELLOW}\\${NC}.venv${YELLOW}\\${NC}Scripts${YELLOW}\\${NC}activate                               ${YELLOW}│${NC}"
 echo -e "${YELLOW}│${NC}   python run.py                                          ${YELLOW}│${NC}"
 echo -e "${YELLOW}│${NC}                                                          ${YELLOW}│${NC}"
 echo -e "${YELLOW}│${NC} ${BOLD}Naechstes Mal starten (Linux/macOS/Git Bash):${NC}            ${YELLOW}│${NC}"
