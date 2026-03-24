@@ -39,13 +39,43 @@ USE_CPU="${USE_CPU:-1}"
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
 NC='\033[0m'
 
 info()  { echo -e "${GREEN}[INFO]${NC}  $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error() { echo -e "${RED}[FEHLER]${NC} $*"; exit 1; }
 
+# ---- Spinner fuer lange Operationen ----
+spinner() {
+    local pid=$1
+    local msg="${2:-Bitte warten...}"
+    local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+    local i=0
+    while kill -0 "$pid" 2>/dev/null; do
+        printf "\r  ${CYAN}${frames[$i]}${NC} %s " "$msg"
+        i=$(( (i + 1) % ${#frames[@]} ))
+        sleep 0.1
+    done
+    wait "$pid"
+    local exit_code=$?
+    printf "\r  ${GREEN}✓${NC} %s \n" "$msg"
+    return $exit_code
+}
+
+# Fuehrt einen Befehl mit Spinner aus
+run_with_spinner() {
+    local msg="$1"
+    shift
+    "$@" &>/dev/null &
+    spinner $! "$msg"
+}
+
 # ---- Voraussetzungen pruefen ----
+echo ""
+echo -e "${BOLD}🚢 Ship Recognition Platform — Installer${NC}"
+echo ""
 info "Pruefe Voraussetzungen..."
 
 # Python
@@ -66,10 +96,9 @@ for cmd in python3 python python.exe; do
     fi
 done
 [ -z "$PYTHON" ] && error "Python >= $PYTHON_MIN nicht gefunden. Bitte installieren: https://www.python.org/downloads/"
-info "Python gefunden: $PYTHON ($($PYTHON --version 2>&1))"
+echo -e "  ${GREEN}✓${NC} Python: $($PYTHON --version 2>&1)"
 
 # Node.js (fuer Frontend-Build)
-# On Windows Git Bash, node/npm may not be in PATH — always add common locations
 for np in "/c/Program Files/nodejs" "/c/Program Files (x86)/nodejs" "$APPDATA/nvm/current" "$HOME/AppData/Roaming/nvm/current"; do
     if [ -d "$np" ]; then
         export PATH="$np:$PATH"
@@ -85,17 +114,17 @@ else
         warn "Node.js $NODE_VER zu alt (min. $NODE_MIN). Frontend wird nicht gebaut."
         BUILD_FRONTEND=0
     else
-        info "Node.js gefunden: $(node --version)"
+        echo -e "  ${GREEN}✓${NC} Node.js: $(node --version)"
         BUILD_FRONTEND=1
     fi
 fi
 
 # ---- venv erstellen ----
+echo ""
 if [ ! -d "$VENV_DIR" ]; then
-    info "Erstelle Python venv in $VENV_DIR ..."
-    "$PYTHON" -m venv "$VENV_DIR"
+    run_with_spinner "Python venv erstellen" "$PYTHON" -m venv "$VENV_DIR"
 else
-    info "venv existiert bereits: $VENV_DIR"
+    echo -e "  ${GREEN}✓${NC} venv existiert bereits"
 fi
 
 # venv aktivieren (save PATH first — venv activate can clobber it on Windows)
@@ -109,114 +138,102 @@ else
 fi
 # Restore essential paths that venv activation may have dropped
 export PATH="$PATH:$_SAVED_PATH"
-info "venv aktiviert: $(command -v python 2>/dev/null || echo 'python')"
 
 # ---- pip aktualisieren ----
-info "Aktualisiere pip..."
-python -m pip install --upgrade pip --quiet
+run_with_spinner "pip aktualisieren" python -m pip install --upgrade pip --quiet
 
 # ---- PyTorch installieren ----
 if [ "$USE_CPU" = "1" ]; then
-    info "Installiere PyTorch (CPU-only, ca. 200 MB)..."
-    pip install --quiet \
+    run_with_spinner "PyTorch installieren (CPU, ~200 MB)" pip install --quiet \
         "torch>=2.0.0,<3.0.0" "torchvision>=0.15.0,<1.0.0" \
         --index-url https://download.pytorch.org/whl/cpu
 else
-    info "Installiere PyTorch (mit CUDA)..."
-    pip install --quiet "torch>=2.0.0,<3.0.0" "torchvision>=0.15.0,<1.0.0"
+    run_with_spinner "PyTorch installieren (CUDA)" pip install --quiet \
+        "torch>=2.0.0,<3.0.0" "torchvision>=0.15.0,<1.0.0"
 fi
 
 # ---- Python-Dependencies installieren ----
-info "Installiere Python-Abhaengigkeiten..."
-pip install --quiet -r requirements.txt
+run_with_spinner "Python-Abhaengigkeiten installieren" pip install --quiet -r requirements.txt
 
 # ---- Projekt als Package installieren ----
-info "Installiere Projekt als editierbares Package..."
-pip install --quiet -e ".[dev,browser]"
+run_with_spinner "Projekt installieren" pip install --quiet -e ".[dev,browser]"
 
 # ---- Playwright Chromium installieren ----
-info "Installiere Playwright Chromium (fuer Cloudflare-Bypass)..."
-python -m playwright install chromium 2>/dev/null || warn "Playwright-Browser konnte nicht installiert werden. MarineTraffic-Scraping funktioniert evtl. nicht."
+python -m playwright install chromium &>/dev/null &
+spinner $! "Playwright Chromium installieren" || warn "Playwright fehlgeschlagen — MarineTraffic-Scraping evtl. nicht moeglich"
 
 # ---- Frontend bauen ----
 if [ "$BUILD_FRONTEND" = "1" ]; then
-    info "Installiere Frontend-Abhaengigkeiten..."
-    (cd frontend && npm ci --quiet 2>/dev/null || npm install --quiet)
-    info "Baue Frontend..."
-    (cd frontend && npm run build)
-    info "Frontend gebaut: frontend-dist/"
+    (cd frontend && npm ci --quiet 2>/dev/null || npm install --quiet) &>/dev/null &
+    spinner $! "Frontend-Abhaengigkeiten installieren"
+    (cd frontend && npm run build) &>/dev/null &
+    spinner $! "Frontend bauen"
 else
     if [ -d "frontend-dist" ]; then
-        info "Frontend-Build existiert bereits (frontend-dist/)"
+        echo -e "  ${GREEN}✓${NC} Frontend-Build existiert bereits"
     else
-        warn "Kein Frontend-Build vorhanden. Starte 'cd frontend && npm install && npm run build' manuell."
+        warn "Kein Frontend-Build. Manuell: cd frontend && npm install && npm run build"
     fi
 fi
 
 # ---- Verzeichnisse erstellen ----
-info "Erstelle Datenverzeichnisse..."
 mkdir -p downloads uploads augmented models/ship_classifier data logs
 
 # ---- .env erstellen ----
 if [ ! -f ".env" ]; then
-    info "Erstelle .env aus .env.example..."
     cp .env.example .env
-    # VPN standardmaessig deaktivieren
     sed -i 's/VPN_ENABLED=true/VPN_ENABLED=false/' .env 2>/dev/null || true
+    echo -e "  ${GREEN}✓${NC} .env erstellt"
 else
-    info ".env existiert bereits"
+    echo -e "  ${GREEN}✓${NC} .env existiert bereits"
 fi
 
 # ---- Datenbank migrieren ----
-info "Fuehre Datenbank-Migrationen aus..."
-python -m alembic upgrade head 2>/dev/null || warn "Alembic-Migration fehlgeschlagen (evtl. schon aktuell)"
+run_with_spinner "Datenbank migrieren" python -m alembic upgrade head 2>/dev/null || true
 
 # ---- ML-Modell herunterladen ----
 if [ ! -f "models/ship_classifier/config.json" ]; then
-    info "Lade ML-Modell herunter (ViT Ship Classifier)..."
     python -c "
 from transformers import ViTForImageClassification, ViTImageProcessor
 name = 'dima806/10_ship_types_image_detection'
-print('Downloading ViT ship classifier...')
 p = ViTImageProcessor.from_pretrained(name)
 m = ViTForImageClassification.from_pretrained(name)
 p.save_pretrained('models/ship_classifier')
 m.save_pretrained('models/ship_classifier')
-print('Model saved.')
-"
+" &>/dev/null &
+    spinner $! "ML-Modell herunterladen (ViT Ship Classifier)"
 else
-    info "ML-Modell bereits vorhanden"
+    echo -e "  ${GREEN}✓${NC} ML-Modell bereits vorhanden"
 fi
 
 # ---- Fertig ----
+PROJ_DIR=$(pwd)
 echo ""
 echo -e "${GREEN}============================================================${NC}"
-echo -e "${GREEN} Installation abgeschlossen! Server startet jetzt...${NC}"
+echo -e "${GREEN}  Installation abgeschlossen!${NC}"
 echo -e "${GREEN}============================================================${NC}"
 echo ""
-echo -e "  ${GREEN}>>> Browser oeffnen: http://localhost:$PORT <<<${NC}"
+echo -e "  ${BOLD}${GREEN}>>> http://localhost:$PORT <<<${NC}"
 echo ""
 echo -e "  API-Docs:  http://localhost:$PORT/docs"
 echo ""
-echo -e "${YELLOW}──────────────────────────────────────────────────────────${NC}"
-echo -e "${YELLOW} Naechstes Mal manuell starten:${NC}"
-echo ""
-echo "  Linux / macOS / Git Bash:"
-echo "    cd $(pwd)"
-echo "    source $VENV_DIR/bin/activate"
-echo "    python run.py"
-echo ""
-echo "  Windows PowerShell:"
-echo "    cd $(pwd)"
-echo "    .\\.venv\\Scripts\\activate"
-echo "    python run.py"
-echo ""
-echo -e "${YELLOW} Server stoppen:${NC}"
-echo "    Strg+C (im Terminal wo der Server laeuft)"
-echo ""
-echo -e "${YELLOW} venv deaktivieren:${NC}"
-echo "    deactivate"
-echo -e "${YELLOW}──────────────────────────────────────────────────────────${NC}"
+echo -e "${YELLOW}┌──────────────────────────────────────────────────────────┐${NC}"
+echo -e "${YELLOW}│${NC} ${BOLD}Server stoppen:${NC}                                         ${YELLOW}│${NC}"
+echo -e "${YELLOW}│${NC}   Strg+C                                                ${YELLOW}│${NC}"
+echo -e "${YELLOW}│${NC}                                                          ${YELLOW}│${NC}"
+echo -e "${YELLOW}│${NC} ${BOLD}Naechstes Mal starten (Windows PowerShell):${NC}              ${YELLOW}│${NC}"
+echo -e "${YELLOW}│${NC}   cd $PROJ_DIR${YELLOW}│${NC}"
+echo -e "${YELLOW}│${NC}   .\\.venv\\Scripts\\activate                               ${YELLOW}│${NC}"
+echo -e "${YELLOW}│${NC}   python run.py                                          ${YELLOW}│${NC}"
+echo -e "${YELLOW}│${NC}                                                          ${YELLOW}│${NC}"
+echo -e "${YELLOW}│${NC} ${BOLD}Naechstes Mal starten (Linux/macOS/Git Bash):${NC}            ${YELLOW}│${NC}"
+echo -e "${YELLOW}│${NC}   cd $PROJ_DIR${YELLOW}│${NC}"
+echo -e "${YELLOW}│${NC}   source .venv/bin/activate                              ${YELLOW}│${NC}"
+echo -e "${YELLOW}│${NC}   python run.py                                          ${YELLOW}│${NC}"
+echo -e "${YELLOW}│${NC}                                                          ${YELLOW}│${NC}"
+echo -e "${YELLOW}│${NC} ${BOLD}venv beenden:${NC}                                            ${YELLOW}│${NC}"
+echo -e "${YELLOW}│${NC}   deactivate                                             ${YELLOW}│${NC}"
+echo -e "${YELLOW}└──────────────────────────────────────────────────────────┘${NC}"
 echo ""
 
 # ---- Server starten ----
