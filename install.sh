@@ -129,6 +129,11 @@ fi
 
 # venv aktivieren (save PATH first — venv activate can clobber it on Windows)
 _SAVED_PATH="$PATH"
+# Provide cygpath stub if missing (Windows Git Bash invoked from PowerShell)
+if ! command -v cygpath &>/dev/null; then
+    cygpath() { echo "$@" | sed 's|\\|/|g'; }
+    export -f cygpath
+fi
 if [ -f "$VENV_DIR/bin/activate" ]; then
     source "$VENV_DIR/bin/activate"
 elif [ -f "$VENV_DIR/Scripts/activate" ]; then
