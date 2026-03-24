@@ -1,10 +1,10 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useVPNStatus } from '@/hooks/useApi.ts'
 
-const tabs = [
+const tabs: { path: string; label: string; matchPrefix?: string }[] = [
   { path: '/Dashboard', label: 'Dashboard' },
-  { path: '/Scraper', label: 'Scraper' },
-  { path: '/Schiffe', label: 'Schiffe' },
+  { path: '/daten/scraper', label: 'Daten', matchPrefix: '/daten' },
+  { path: '/Schiffe', label: 'Schiffe', matchPrefix: '/Schiffe' },
   { path: '/Erkennung', label: 'Erkennung' },
   { path: '/Training', label: 'Training' },
   { path: '/Einstellungen', label: 'Einstellungen' },
@@ -13,6 +13,12 @@ const tabs = [
 
 export function Header() {
   const { data: vpn } = useVPNStatus()
+  const location = useLocation()
+
+  const isTabActive = (tab: typeof tabs[0]) => {
+    if (tab.matchPrefix) return location.pathname.startsWith(tab.matchPrefix)
+    return location.pathname === tab.path || location.pathname.startsWith(tab.path + '/')
+  }
 
   return (
     <header className="sticky top-0 z-50 bg-[var(--surface)] border-b border-[var(--border)]">
@@ -28,9 +34,9 @@ export function Header() {
               <NavLink
                 key={tab.path}
                 to={tab.path}
-                className={({ isActive }) =>
+                className={() =>
                   `px-3 py-2 rounded-lg text-sm font-medium transition-colors no-underline ${
-                    isActive
+                    isTabActive(tab)
                       ? 'bg-[var(--primary)] text-white'
                       : 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-hover)]'
                   }`
@@ -55,9 +61,9 @@ export function Header() {
             <NavLink
               key={tab.path}
               to={tab.path}
-              className={({ isActive }) =>
+              className={() =>
                 `px-3 py-1.5 rounded text-xs font-medium whitespace-nowrap no-underline ${
-                  isActive
+                  isTabActive(tab)
                     ? 'bg-[var(--primary)] text-white'
                     : 'text-[var(--text-muted)] bg-[var(--surface-hover)]'
                 }`

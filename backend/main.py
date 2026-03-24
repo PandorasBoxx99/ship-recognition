@@ -55,7 +55,7 @@ app.add_middleware(
 )
 
 # --- Register routers ---
-from backend.routers import advanced, agent, augmentation, classify, datasets, docs, models, scrape
+from backend.routers import advanced, agent, augmentation, classify, datasets, detection, docs, models, scrape
 from backend.routers import settings as settings_router
 from backend.routers import ship_entities, ships, stats, training, vpn
 
@@ -72,6 +72,7 @@ app.include_router(ship_entities.router)
 app.include_router(agent.router)
 app.include_router(datasets.router)
 app.include_router(advanced.router)
+app.include_router(detection.router)
 app.include_router(docs.router)
 
 

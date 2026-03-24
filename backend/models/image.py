@@ -27,10 +27,15 @@ class Image(Base):
     split_type = Column(Text)  # train, val, test
     label_status = Column(Text)  # unlabeled, labeled, reviewed
     review_status = Column(Text)  # pending, approved, rejected
+    # Detection / crop fields
+    parent_image_id = Column(Integer, ForeignKey("images.id"), index=True, nullable=True)
+    is_primary_crop = Column(Integer, default=0)  # 1 = largest ship crop
+    crop_rank = Column(Integer, nullable=True)  # 1 = largest, 2 = second, etc.
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     ship = relationship("Ship", back_populates="images")
+    parent_image = relationship("Image", remote_side="Image.id", backref="crops")
     annotations = relationship("ImageAnnotation", back_populates="image", cascade="all, delete-orphan")
     inference_logs = relationship("InferenceLog", back_populates="image")
 

@@ -46,6 +46,7 @@ export interface Ship {
 export interface ShipListResponse {
   ships: Ship[]
   types: string[]
+  sources: string[]
   total: number
   page: number
   per_page: number
@@ -146,3 +147,81 @@ export interface AugmentStatus {
 }
 
 export type TabId = 'dashboard' | 'scraper' | 'ships' | 'classify' | 'training' | 'settings'
+
+// ---- v2 Ship Entities (grouped) ----
+
+export interface ShipEntity {
+  id: number
+  name: string
+  canonical_name: string | null
+  ship_type: string | null
+  ship_class: string | null
+  flag: string | null
+  imo: string | null
+  mmsi: string | null
+  year_built: number | null
+  operator: string | null
+  country: string | null
+  image_count: number
+  thumbnail: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface ShipImage {
+  id: number
+  file_path: string
+  src: string | null
+  source_url: string | null
+  source_name: string | null
+  file_size: number | null
+  width: number | null
+  height: number | null
+  quality_score: number | null
+  is_synthetic: boolean
+  parent_image_id: number | null
+  is_primary_crop: boolean
+  crop_rank: number | null
+  has_crops: boolean
+  created_at: string | null
+}
+
+export interface DetectionResult {
+  ship_id: number
+  ship_name: string
+  images_processed: number
+  detections_found: number
+  crops_created: number
+}
+
+export interface DetectionStatus {
+  running: boolean
+  progress: number
+  total: number
+  message: string
+}
+
+export interface ShipAlias {
+  id: number
+  alias_name: string
+  source: string | null
+}
+
+export interface ShipEntityDetail extends ShipEntity {
+  images: ShipImage[]
+  aliases: ShipAlias[]
+  sources: string[]
+  description: string | null
+  notes: string | null
+  subtype: string | null
+}
+
+export interface ShipEntityListResponse {
+  ships: ShipEntity[]
+  types: string[]
+  sources: string[]
+  total: number
+  page: number
+  per_page: number
+  pages: number
+}

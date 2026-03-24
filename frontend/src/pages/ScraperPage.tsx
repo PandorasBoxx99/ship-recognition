@@ -8,7 +8,108 @@ import { Card } from '@/components/ui/Card.tsx'
 import { Button } from '@/components/ui/Button.tsx'
 import { StatusBadge } from '@/components/ui/Badge.tsx'
 import { ProgressBar } from '@/components/ui/ProgressBar.tsx'
-import type { AnalyzeResult } from '@/types/index.ts'
+import type { AnalyzeResult, Job } from '@/types/index.ts'
+import axios from 'axios'
+
+function JobLogPanel({ jobId }: { jobId: number }) {
+  const [lines, setLines] = useState<string[]>([])
+  const [open, setOpen] = useState(false)
+
+  const loadLog = async () => {
+    try {
+      const res = await axios.get<{ lines: string[]; total: number }>(`/api/jobs/${jobId}/log?lines=50`)
+      setLines(res.data.lines)
+    } catch { setLines(['Log konnte nicht geladen werden.']) }
+  }
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => { if (!open) loadLog(); setOpen(!open) }}
+        className="text-xs text-[var(--text-muted)] hover:text-[var(--text)] underline"
+      >
+        {open ? 'Log ausblenden' : 'Log anzeigen'}
+      </button>
+      {open && (
+        <div className="mt-1 bg-black/80 text-green-400 rounded p-2 max-h-48 overflow-y-auto font-mono text-[11px] leading-tight">
+          {lines.length === 0 ? (
+            <span className="text-gray-500">Keine Log-Eintraege vorhanden</span>
+          ) : (
+            lines.map((line, i) => <div key={i}>{line}</div>)
+          )}
+          <button onClick={loadLog} className="mt-1 text-blue-400 underline text-[10px]">Aktualisieren</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function JobCard({ job, startJob, pauseJob, deleteJob }: {
+  job: Job
+  startJob: ReturnType<typeof useStartJob>
+  pauseJob: ReturnType<typeof usePauseJob>
+  deleteJob: ReturnType<typeof useDeleteJob>
+}) {
+  const canResume = job.status === 'pending' || job.status === 'paused' || job.status === 'failed'
+  const isResuming = job.status === 'paused' || job.status === 'failed'
+
+  return (
+    <div key={job.id} className="bg-[var(--bg)] rounded-lg p-3">
+      <div className="flex items-center justify-between mb-2">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium truncate">{job.name ?? job.url}</div>
+          <div className="text-xs text-[var(--text-muted)]">{job.url}</div>
+        </div>
+        <StatusBadge status={job.status} />
+      </div>
+
+      {/* Error message - prominent red box */}
+      {job.error_message && (job.status === 'failed' || job.status === 'paused') && (
+        <div className="mb-2 p-2 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+          <span className="font-semibold">Fehler: </span>{job.error_message}
+        </div>
+      )}
+
+      {/* Running spinner */}
+      {job.status === 'running' && (
+        <div className="flex items-center gap-2 mb-2">
+          <svg className="animate-spin h-4 w-4 text-[var(--primary)]" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+          <span className="text-xs text-[var(--primary)] font-medium">Download laeuft...</span>
+        </div>
+      )}
+
+      <ProgressBar
+        value={job.downloaded}
+        max={(job.total_items || job.limit_count) || 1}
+        label={`${job.downloaded}/${job.total_items || job.limit_count || 0}`}
+      />
+
+      <div className="flex gap-2 mt-2">
+        {canResume && (
+          <Button size="sm" variant="success" onClick={() => startJob.mutate(job.id)}
+            disabled={startJob.isPending}>
+            {startJob.isPending ? 'Starte...' : isResuming ? 'Fortsetzen' : 'Start'}
+          </Button>
+        )}
+        {job.status === 'running' && (
+          <Button size="sm" variant="ghost" onClick={() => pauseJob.mutate(job.id)}
+            disabled={pauseJob.isPending}>
+            {pauseJob.isPending ? 'Pausiere...' : 'Pause'}
+          </Button>
+        )}
+        <Button size="sm" variant="danger" onClick={() => { if (confirm('Job loeschen?')) deleteJob.mutate(job.id) }}>
+          Loeschen
+        </Button>
+      </div>
+
+      {/* Log panel */}
+      <JobLogPanel jobId={job.id} />
+    </div>
+  )
+}
 
 export function ScraperPage() {
   const { data: vpn } = useVPNStatus()
@@ -42,7 +143,7 @@ export function ScraperPage() {
 
   const handleCreateJob = async () => {
     if (!currentUrl) return
-    await createJob.mutateAsync({
+    const job = await createJob.mutateAsync({
       url: currentUrl,
       limit,
       delay_min: delayMin,
@@ -50,6 +151,12 @@ export function ScraperPage() {
       vpn_required: vpnRequired,
     })
     setAnalysisResult(null)
+    // Auto-start the job immediately after creation
+    if (job?.id && job.total_items > 0) {
+      try {
+        await startJob.mutateAsync(job.id)
+      } catch { /* Start may fail if VPN required — user can start manually */ }
+    }
   }
 
   return (
@@ -93,7 +200,7 @@ export function ScraperPage() {
               onChange={(e) => setSelectedUrl(e.target.value)}
               className="flex-1 bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm"
             >
-              <option value="">-- Quelle wählen --</option>
+              <option value="">-- Quelle waehlen --</option>
               {urls?.map((u) => (
                 <option key={u.id} value={u.url}>{u.name} ({u.url})</option>
               ))}
@@ -140,7 +247,7 @@ export function ScraperPage() {
               {analyze.isPending ? 'Analysiere...' : 'Website analysieren'}
             </Button>
             <Button variant="success" onClick={handleCreateJob} disabled={!currentUrl || createJob.isPending}>
-              {createJob.isPending ? 'Erstelle...' : 'Job erstellen'}
+              {createJob.isPending ? 'Erstelle & starte...' : 'Job erstellen & starten'}
             </Button>
           </div>
 
@@ -160,28 +267,7 @@ export function ScraperPage() {
         <h2 className="text-lg font-semibold mb-3">Jobs ({jobs?.length ?? 0})</h2>
         <div className="space-y-3">
           {jobs?.map((job) => (
-            <div key={job.id} className="bg-[var(--bg)] rounded-lg p-3">
-              <div className="flex items-center justify-between mb-2">
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium truncate">{job.name ?? job.url}</div>
-                  <div className="text-xs text-[var(--text-muted)]">{job.url}</div>
-                </div>
-                <StatusBadge status={job.status} />
-              </div>
-              <ProgressBar value={job.downloaded} max={job.total_items || 1}
-                label={`${job.downloaded}/${job.total_items}`} />
-              <div className="flex gap-2 mt-2">
-                {(job.status === 'pending' || job.status === 'paused') && (
-                  <Button size="sm" variant="success" onClick={() => startJob.mutate(job.id)}>Start</Button>
-                )}
-                {job.status === 'running' && (
-                  <Button size="sm" variant="ghost" onClick={() => pauseJob.mutate(job.id)}>Pause</Button>
-                )}
-                <Button size="sm" variant="danger" onClick={() => { if (confirm('Job löschen?')) deleteJob.mutate(job.id) }}>
-                  Löschen
-                </Button>
-              </div>
-            </div>
+            <JobCard key={job.id} job={job} startJob={startJob} pauseJob={pauseJob} deleteJob={deleteJob} />
           ))}
           {!jobs?.length && <p className="text-sm text-[var(--text-muted)]">Keine Jobs vorhanden</p>}
         </div>

@@ -1,6 +1,7 @@
 """Scraper service — website analysis, image discovery, and download."""
 
 import json
+import logging
 import os
 import random
 import re
@@ -21,6 +22,24 @@ from backend.models.job import Job
 import structlog
 
 log = structlog.get_logger()
+
+# ---- Dedicated file logger for scraping ----
+_scrape_logger = logging.getLogger("scrape_file")
+_scrape_logger.setLevel(logging.DEBUG)
+_scrape_log_path = os.path.join(settings.LOG_DIR, "scrape.log")
+os.makedirs(settings.LOG_DIR, exist_ok=True)
+_fh = logging.FileHandler(_scrape_log_path, encoding="utf-8")
+_fh.setFormatter(logging.Formatter("%(asctime)s  %(levelname)-7s  %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+_scrape_logger.addHandler(_fh)
+
+
+def scrape_log(level: str, job_id: int | None, msg: str, **kw):
+    """Write to both structlog and the dedicated scrape.log file."""
+    extra = " ".join(f"{k}={v}" for k, v in kw.items()) if kw else ""
+    prefix = f"[Job {job_id}] " if job_id else ""
+    line = f"{prefix}{msg}  {extra}".strip()
+    getattr(_scrape_logger, level, _scrape_logger.info)(line)
+    getattr(log, level, log.info)(msg, job_id=job_id, **kw)
 
 HEADERS = {
     "User-Agent": (
@@ -245,7 +264,7 @@ def _fetch_vesselfinder_details(vessel_url: str) -> dict:
 
 
 def download_image(url: str, save_path: str) -> bool:
-    """Download a single image."""
+    """Download a single image via HTTP."""
     try:
         response = _session.get(url, timeout=30, stream=True)
         response.raise_for_status()
@@ -260,18 +279,66 @@ def download_image(url: str, save_path: str) -> bool:
         return False
 
 
+def _download_with_browser(page, url: str, save_path: str) -> bool:
+    """Download an image using Playwright browser (bypasses Cloudflare).
+
+    Uses page.goto() to navigate to the image URL so Cloudflare cookies are sent.
+    Captures the response body from the network response.
+    """
+    try:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+        # Navigate to image URL — browser sends cookies from its session
+        resp = page.goto(url, timeout=30000, wait_until="load")
+        if resp and resp.ok:
+            body = resp.body()
+            if body and len(body) > 1000:  # sanity check: real image > 1KB
+                with open(save_path, "wb") as f:
+                    f.write(body)
+                log.info("browser_download_ok", url=url, size=len(body))
+                return True
+            else:
+                log.error("browser_download_too_small", url=url, size=len(body) if body else 0)
+                return False
+        else:
+            status = resp.status if resp else "no response"
+            log.error("browser_download_error", url=url, status=status)
+            return False
+    except Exception as e:
+        log.error("browser_download_error", url=url, error=str(e))
+        return False
+
+
+def _needs_browser(url: str) -> bool:
+    """Check if the URL requires a browser-based download (Cloudflare-protected sites)."""
+    return "marinetraffic.com" in url or "shipspotting.com" in url
+
+
 def run_scraping_job(job_id: int) -> None:
-    """Background task for scraping. Runs in its own thread with its own DB session."""
+    """Background task for scraping. Runs in its own thread with its own DB session.
+
+    Supports resume: only processes items with status='pending', so already-downloaded
+    or previously-failed items are skipped automatically.
+    """
     db = SessionLocal()
+    pw = None
+    browser = None
+    succeeded = 0
+    failed = 0
+    abort_reason = ""
+
     try:
         job = db.query(Job).filter(Job.id == job_id).first()
         if not job:
+            scrape_log("error", job_id, "Job nicht gefunden in DB")
             return
 
         job.status = "running"
-        job.started_at = datetime.now().isoformat()
+        job.started_at = job.started_at or datetime.now()
+        job.error_message = None  # Clear previous error on resume
         db.commit()
 
+        # Only fetch pending items (enables resume after pause/failure)
         items = (
             db.query(Item)
             .filter(Item.job_id == job_id, Item.status == "pending")
@@ -279,49 +346,174 @@ def run_scraping_job(job_id: int) -> None:
             .all()
         )
 
-        for item in items:
+        pending_count = len(items)
+        already_done = (job.downloaded or 0)
+        scrape_log("info", job_id,
+                   f"START  url={job.url}  pending={pending_count}  already_done={already_done}  limit={job.limit_count}")
+
+        if pending_count == 0:
+            scrape_log("info", job_id, "Keine ausstehenden Items — Job abgeschlossen")
+            job.status = "completed"
+            job.completed_at = datetime.now()
+            db.commit()
+            return
+
+        # Launch browser if needed for Cloudflare-protected downloads
+        use_browser = _needs_browser(job.url)
+        page = None
+        if use_browser:
+            try:
+                from backend.services.browser_scraper import _launch_browser
+                pw, browser, page = _launch_browser()
+                page.goto(job.url, timeout=30000, wait_until="domcontentloaded")
+                time.sleep(5)
+                scrape_log("info", job_id, "Browser-Session gestartet (Cloudflare-Bypass)")
+            except Exception as e:
+                abort_reason = f"Browser konnte nicht gestartet werden: {e}"
+                scrape_log("error", job_id, abort_reason)
+                job.status = "failed"
+                job.error_message = abort_reason
+                db.commit()
+                return
+
+        consecutive_failures = 0
+        MAX_CONSECUTIVE_FAILURES = 5
+
+        for idx, item in enumerate(items, 1):
             # Check if job was paused
             db.refresh(job)
             if job.status != "running":
+                abort_reason = f"Job pausiert bei Item {idx}/{pending_count} (Item-ID {item.id})"
+                scrape_log("warning", job_id, abort_reason)
                 break
 
             delay = random.uniform(job.delay_min, job.delay_max)
             time.sleep(delay)
 
-            if item.image_url:
-                filename = f"{job_id}_{item.id}_{os.path.basename(urlparse(item.image_url).path)}"
-                save_path = os.path.join(settings.DOWNLOAD_DIR, str(job_id), filename)
-
-                success = download_image(item.image_url, save_path)
-
-                if success:
-                    item.status = "downloaded"
-                    item.local_path = save_path
-                    item.downloaded_at = datetime.now().isoformat()
-                else:
-                    item.status = "failed"
-
+            if not item.image_url:
+                scrape_log("warning", job_id, f"Item {item.id}: Keine image_url, uebersprungen")
+                item.status = "failed"
+                item.error_message = "Keine Bild-URL vorhanden"
+                failed += 1
                 job.downloaded = (job.downloaded or 0) + 1
                 db.commit()
+                continue
 
-        job.status = "completed"
-        job.completed_at = datetime.now().isoformat()
+            # Build filename
+            filename = f"{job_id}_{item.id}_{os.path.basename(urlparse(item.image_url).path)}"
+            if not os.path.splitext(filename)[1]:
+                meta = {}
+                try:
+                    meta = json.loads(item.metadata_ or "{}")
+                except Exception:
+                    pass
+                photo_id = meta.get("photo_id", item.id)
+                filename = f"{job_id}_{item.id}_{photo_id}.jpg"
+
+            save_path = os.path.join(settings.DOWNLOAD_DIR, str(job_id), filename)
+
+            # Download
+            if use_browser and page:
+                success = _download_with_browser(page, item.image_url, save_path)
+            else:
+                success = download_image(item.image_url, save_path)
+
+            if success:
+                item.status = "downloaded"
+                item.local_path = save_path
+                item.downloaded_at = datetime.now()
+                item.error_message = None
+                succeeded += 1
+                consecutive_failures = 0
+
+                # Sync to normalized Ship+Image entity
+                try:
+                    from backend.services.ship_sync_service import sync_item_to_ship
+                    ship, _img = sync_item_to_ship(db, item)
+                    scrape_log("info", job_id,
+                               f"OK     [{idx}/{pending_count}]  {item.ship_name or 'Unbekannt'}  "
+                               f"photo_id={meta.get('photo_id', '-')}  size={os.path.getsize(save_path)}B  "
+                               f"ship_id={ship.id}")
+                except Exception as sync_err:
+                    scrape_log("warning", job_id,
+                               f"OK     [{idx}/{pending_count}]  {item.ship_name or 'Unbekannt'}  "
+                               f"photo_id={meta.get('photo_id', '-')}  size={os.path.getsize(save_path)}B  "
+                               f"sync_error={sync_err}")
+            else:
+                item.status = "failed"
+                item.error_message = "Download fehlgeschlagen"
+                failed += 1
+                consecutive_failures += 1
+                scrape_log("error", job_id,
+                           f"FEHLER [{idx}/{pending_count}]  {item.ship_name or 'Unbekannt'}  "
+                           f"url={item.image_url}")
+
+            job.downloaded = (job.downloaded or 0) + 1
+            db.commit()
+
+            # Abort if too many consecutive failures
+            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                abort_reason = (
+                    f"Abgebrochen: {MAX_CONSECUTIVE_FAILURES} Downloads in Folge fehlgeschlagen. "
+                    f"Moeglicherweise blockiert die Quelle. "
+                    f"Fortschritt: {succeeded} OK, {failed} Fehler von {pending_count}."
+                )
+                scrape_log("error", job_id, abort_reason)
+                job.status = "failed"
+                job.error_message = abort_reason
+                db.commit()
+                return
+
+        # Final status
+        remaining = db.query(Item).filter(
+            Item.job_id == job_id, Item.status == "pending"
+        ).count()
+
+        if remaining == 0 and job.status == "running":
+            job.status = "completed"
+            job.completed_at = datetime.now()
+            summary = f"Abgeschlossen: {succeeded} heruntergeladen, {failed} fehlgeschlagen"
+            scrape_log("info", job_id, f"FERTIG  {summary}")
+        elif job.status == "running":
+            # Paused externally or partial
+            job.status = "paused"
+            summary = f"Pausiert: {succeeded} OK, {failed} Fehler, {remaining} ausstehend"
+            job.error_message = abort_reason or summary
+            scrape_log("warning", job_id, summary)
+
         db.commit()
 
     except Exception as e:
-        log.error("scraping_job_failed", job_id=job_id, error=str(e))
-        job = db.query(Job).filter(Job.id == job_id).first()
-        if job:
-            job.status = "failed"
-            job.error_message = str(e)
-            db.commit()
+        abort_reason = f"Unerwarteter Fehler: {e}"
+        scrape_log("error", job_id, abort_reason)
+        try:
+            job = db.query(Job).filter(Job.id == job_id).first()
+            if job:
+                job.status = "failed"
+                job.error_message = abort_reason
+                db.commit()
+        except Exception:
+            pass
     finally:
+        scrape_log("info", job_id,
+                   f"ENDE   succeeded={succeeded}  failed={failed}  abort_reason={abort_reason or 'keiner'}")
+        if browser:
+            try:
+                browser.close()
+            except Exception:
+                pass
+        if pw:
+            try:
+                pw.stop()
+            except Exception:
+                pass
         db.close()
         active_jobs.pop(job_id, None)
 
 
 def start_scraping_job(job_id: int) -> None:
     """Launch the scraping job in a background thread."""
+    scrape_log("info", job_id, "Thread wird gestartet")
     thread = threading.Thread(target=run_scraping_job, args=(job_id,), daemon=True)
     thread.start()
     active_jobs[job_id] = thread

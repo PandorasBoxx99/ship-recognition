@@ -1,7 +1,9 @@
 import axios from 'axios'
 import type {
   AnalyzeResult, AugmentStatus, ClassificationRecord, ClassifyResponse,
+  DetectionResult, DetectionStatus,
   Job, JobCreate, ModelInfo, PredefinedURL, Prediction, Ship, ShipListResponse,
+  ShipEntityListResponse, ShipEntityDetail,
   ShipStats, Stats, TrainingStatus, VPNStatus,
 } from '@/types/index.ts'
 
@@ -28,7 +30,7 @@ export const jobsApi = {
 
 // Ships
 export const shipsApi = {
-  list: (params: { type?: string; search?: string; page?: number; per_page?: number }) =>
+  list: (params: { type?: string; source?: string; search?: string; page?: number; per_page?: number }) =>
     client.get<ShipListResponse>('/api/ships', { params }).then(r => r.data),
   get: (id: number) => client.get<Ship>(`/api/ships/${id}`).then(r => r.data),
   stats: () => client.get<ShipStats>('/api/ships/stats').then(r => r.data),
@@ -60,6 +62,27 @@ export const augmentApi = {
   start: (data: { source_dir: string; num_per_image?: number; transforms?: Record<string, unknown> }) =>
     client.post('/api/augment', data).then(r => r.data),
   status: () => client.get<AugmentStatus>('/api/augment/status').then(r => r.data),
+}
+
+// Ship Entities (v2 — grouped)
+export const shipEntitiesApi = {
+  list: (params: { search?: string; ship_type?: string; source?: string; page?: number; per_page?: number }) =>
+    client.get<ShipEntityListResponse>('/api/v2/ships', { params }).then(r => r.data),
+  get: (id: number, includeCrops = true) =>
+    client.get<ShipEntityDetail>(`/api/v2/ships/${id}`, { params: { include_crops: includeCrops } }).then(r => r.data),
+  backfill: () => client.post('/api/v2/ships/backfill').then(r => r.data),
+  merge: (shipId: number, targetShipId: number) =>
+    client.post(`/api/v2/ships/${shipId}/merge`, { target_ship_id: targetShipId }).then(r => r.data),
+}
+
+// Detection
+export const detectionApi = {
+  detectShip: (shipId: number) =>
+    client.post<DetectionResult>(`/api/v2/ships/${shipId}/detect`).then(r => r.data),
+  batchDetect: () =>
+    client.post('/api/detect/batch').then(r => r.data),
+  batchStatus: () =>
+    client.get<DetectionStatus>('/api/detect/batch/status').then(r => r.data),
 }
 
 // Stats

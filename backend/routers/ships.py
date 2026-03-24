@@ -1,6 +1,7 @@
 """Ship listing and detail endpoints."""
 
 import json
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, text
@@ -17,6 +18,7 @@ router = APIRouter(prefix="/api/ships", tags=["ships"])
 @router.get("")
 def get_ships(
     type: str = Query("", alias="type"),
+    source: str = "",
     search: str = "",
     page: int = 1,
     per_page: int = 50,
@@ -33,6 +35,19 @@ def get_ships(
     )
     types = [t[0] for t in type_rows]
 
+    # Get distinct sources (extract domain from job URL)
+    source_rows = (
+        db.query(Job.url)
+        .join(Item, Item.job_id == Job.id)
+        .filter(Item.status == "downloaded")
+        .distinct()
+        .all()
+    )
+    sources = sorted({
+        urlparse(r[0]).netloc.replace("www.", "")
+        for r in source_rows if r[0]
+    })
+
     # Base query: downloaded items joined with jobs
     query = (
         db.query(
@@ -46,6 +61,8 @@ def get_ships(
 
     if type:
         query = query.filter(Item.ship_type == type)
+    if source:
+        query = query.filter(Job.url.like(f"%{source}%"))
     if search:
         pattern = f"%{search}%"
         query = query.filter(
@@ -66,6 +83,7 @@ def get_ships(
     return {
         "ships": ships,
         "types": types,
+        "sources": sources,
         "total": total,
         "page": page,
         "per_page": per_page,

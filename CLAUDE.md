@@ -9,13 +9,16 @@ Ship Recognition Platform — modular web application for downloading, classifyi
 ## Commands
 
 ```bash
-# Install dependencies
+# One-click install (creates venv, installs everything)
+bash install.sh
+
+# Or manual install
 pip install -e ".[dev]"
 
 # Run the backend (serves on http://localhost:3025)
 python run.py
 
-# Run tests (56 tests)
+# Run tests
 pytest
 
 # Frontend dev server (with HMR, proxies to backend)

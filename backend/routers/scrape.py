@@ -14,6 +14,7 @@ from backend.models.job import Job
 from backend.schemas.job import AnalyzeRequest, JobCreateRequest
 from backend.services import vpn_service
 from backend.services.scrape_service import (
+    _scrape_log_path,
     active_jobs,
     analyze_website,
     find_images,
@@ -70,9 +71,15 @@ def create_job(req: JobCreateRequest, db: Session = Depends(get_db)):
         # Build metadata JSON from scraped details
         source_domain = urlparse(req.url).netloc.replace("www.", "")
         meta = {"source": source_domain, "scraped_at": datetime.now().isoformat()}
-        for key in ["vessel_url", "photo_id", "flag", "year_built", "length",
-                     "beam", "gross_tonnage", "dwt"]:
-            if key in img:
+        meta_keys = [
+            "vessel_url", "photo_id", "detail_url",
+            "flag", "year_built", "length", "beam", "gross_tonnage", "dwt",
+            "location", "photographer", "photo_date",
+            "latitude", "longitude", "coordinates",
+            "weather", "port", "country",
+        ]
+        for key in meta_keys:
+            if key in img and img[key]:
                 meta[key] = img[key]
 
         db.add(
@@ -114,13 +121,29 @@ def start_job(job_id: int, db: Session = Depends(get_db)):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    if job.status == "running":
+        raise HTTPException(status_code=400, detail="Job laeuft bereits")
+
     if job.vpn_required:
         vpn_status = vpn_service.get_vpn_status()
         if not vpn_status.get("connected"):
-            raise HTTPException(status_code=400, detail="VPN not connected. Please connect first.")
+            raise HTTPException(status_code=400, detail="VPN nicht verbunden. Bitte zuerst verbinden.")
+
+    # Check if there are pending items (needed for resume)
+    pending = db.query(Item).filter(Item.job_id == job_id, Item.status == "pending").count()
+    if pending == 0:
+        raise HTTPException(status_code=400, detail="Keine ausstehenden Items zum Herunterladen.")
+
+    # Reset failed items to pending so they get retried on resume
+    failed_items = db.query(Item).filter(Item.job_id == job_id, Item.status == "failed").all()
+    for item in failed_items:
+        item.status = "pending"
+        item.error_message = None
+    if failed_items:
+        db.commit()
 
     start_scraping_job(job_id)
-    return {"status": "started", "job_id": job_id}
+    return {"status": "started", "job_id": job_id, "pending_items": pending + len(failed_items)}
 
 
 @router.post("/jobs/{job_id}/pause")
@@ -140,6 +163,25 @@ def delete_job(job_id: int, db: Session = Depends(get_db)):
     db.query(Job).filter(Job.id == job_id).delete()
     db.commit()
     return {"status": "deleted"}
+
+
+@router.get("/jobs/{job_id}/log")
+def get_job_log(job_id: int, lines: int = 100):
+    """Get scrape log entries for a specific job (last N lines)."""
+    if not os.path.exists(_scrape_log_path):
+        return {"lines": [], "file": _scrape_log_path}
+
+    job_prefix = f"[Job {job_id}]"
+    matching = []
+    try:
+        with open(_scrape_log_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if job_prefix in line:
+                    matching.append(line.rstrip())
+    except Exception:
+        pass
+
+    return {"lines": matching[-lines:], "total": len(matching)}
 
 
 def _job_to_dict(job: Job) -> dict:

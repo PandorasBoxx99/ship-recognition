@@ -80,6 +80,20 @@ def find_marinetraffic_images(url: str, limit: int = 50) -> list[dict]:
 
         log.info("browser_loaded", title=title)
 
+        # Scroll down to load more images (lazy-loaded content)
+        prev_height = 0
+        scroll_attempts = 0
+        max_scrolls = 10
+        while scroll_attempts < max_scrolls:
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            time.sleep(2)
+            new_height = page.evaluate("document.body.scrollHeight")
+            if new_height == prev_height:
+                break
+            prev_height = new_height
+            scroll_attempts += 1
+            log.info("browser_scrolled", attempt=scroll_attempts, height=new_height)
+
         from bs4 import BeautifulSoup
         html = page.content()
         soup = BeautifulSoup(html, "html.parser")
@@ -103,6 +117,7 @@ def find_marinetraffic_images(url: str, limit: int = 50) -> list[dict]:
             detail_url = ""
             location = ""
             photographer = ""
+            photo_date = ""
 
             if container:
                 # Ship name + detail link
@@ -113,19 +128,31 @@ def find_marinetraffic_images(url: str, limit: int = 50) -> list[dict]:
                     if detail_url and not detail_url.startswith("http"):
                         detail_url = MARINETRAFFIC_BASE + detail_url
 
-                # Extract location and photographer from text
+                # Extract location, photographer, and date from text
+                # On MarineTraffic listings, text order is typically:
+                #   ship_name | photographer | date | location | ...
                 text_parts = container.get_text(" | ", strip=True).split(" | ")
+                non_meta_parts: list[str] = []
                 for part in text_parts:
                     part = part.strip()
-                    # Skip known non-location parts
-                    if part in (ship_name, "Rate") or "rating" in part.lower():
+                    if not part or len(part) < 2:
                         continue
+                    if part == ship_name or part == "Rate" or "rating" in part.lower():
+                        continue
+                    # Capture date (YYYY-MM-DD HH:MM or DD/MM/YYYY patterns)
                     if re.match(r"\d{4}-\d{2}-\d{2}", part):
-                        continue  # date
-                    if not location and len(part) > 2 and part != ship_name:
-                        location = part
-                    elif location and not photographer and len(part) > 2:
-                        photographer = part
+                        photo_date = part
+                        continue
+                    if re.match(r"\d{2}/\d{2}/\d{4}", part):
+                        photo_date = part
+                        continue
+                    non_meta_parts.append(part)
+
+                # MarineTraffic: first part is photographer, second could be location
+                if len(non_meta_parts) >= 1:
+                    photographer = non_meta_parts[0]
+                if len(non_meta_parts) >= 2:
+                    location = non_meta_parts[1]
 
             images.append({
                 "url": image_url,
@@ -135,6 +162,7 @@ def find_marinetraffic_images(url: str, limit: int = 50) -> list[dict]:
                 "detail_url": detail_url,
                 "location": location,
                 "photographer": photographer,
+                "photo_date": photo_date,
             })
 
             if len(images) >= limit:
@@ -142,8 +170,10 @@ def find_marinetraffic_images(url: str, limit: int = 50) -> list[dict]:
 
         log.info("marinetraffic_scraped", count=len(images))
 
-        # Fetch detail pages for ship metadata
+        # Fetch detail pages for ship metadata + find all photos per ship
         seen_details: dict[str, dict] = {}
+        extra_images: list[dict] = []
+
         for img in images:
             durl = img.get("detail_url", "")
             if not durl or durl in seen_details:
@@ -159,10 +189,35 @@ def find_marinetraffic_images(url: str, limit: int = 50) -> list[dict]:
                 seen_details[durl] = meta
                 img.update(meta)
                 log.info("mt_detail_scraped", ship=img.get("alt"), meta=meta)
+
+                # Find ALL photos of this ship on the detail page
+                detail_soup = BeautifulSoup(detail_html, "html.parser")
+                existing_ids = {i.get("photo_id") for i in images + extra_images}
+                for detail_img in detail_soup.find_all("img", src=lambda s: s and "getPhoto" in s):
+                    pid_match = re.search(r"photo_id=(\d+)", detail_img.get("src", ""))
+                    if pid_match and pid_match.group(1) not in existing_ids:
+                        pid = pid_match.group(1)
+                        extra_images.append({
+                            "url": f"{MARINETRAFFIC_BASE}/getPhoto/?photo_id={pid}&photo_size=800",
+                            "alt": img.get("alt", ""),
+                            "source_page": durl,
+                            "photo_id": pid,
+                            "detail_url": durl,
+                            "location": img.get("location", ""),
+                            "photographer": "",
+                            **meta,
+                        })
+                        existing_ids.add(pid)
+                        log.info("mt_extra_photo", ship=img.get("alt"), photo_id=pid)
+
                 time.sleep(1)
             except Exception as e:
                 log.warning("mt_detail_error", url=durl, error=str(e))
                 seen_details[durl] = {}
+
+        # Merge extra images from ship detail pages
+        images.extend(extra_images)
+        log.info("marinetraffic_total_with_extras", listing=len(images) - len(extra_images), extras=len(extra_images), total=len(images))
 
         return images
 
@@ -225,5 +280,30 @@ def _parse_marinetraffic_detail(html: str) -> dict:
             value = text.split(":")[-1].strip()
             if value:
                 meta["ship_type"] = value
+
+    # Extract coordinates (lat/lon) from page content
+    full_text = soup.get_text()
+    lat_match = re.search(r"(?:lat|latitude)[:\s]*(-?\d+\.?\d*)", full_text, re.IGNORECASE)
+    lon_match = re.search(r"(?:lon|longitude)[:\s]*(-?\d+\.?\d*)", full_text, re.IGNORECASE)
+    if lat_match:
+        meta["latitude"] = lat_match.group(1)
+    if lon_match:
+        meta["longitude"] = lon_match.group(1)
+
+    # Try to extract coordinates from data attributes or meta tags
+    for el in soup.find_all(attrs={"data-lat": True}):
+        meta["latitude"] = el["data-lat"]
+        if el.get("data-lon"):
+            meta["longitude"] = el["data-lon"]
+        break
+
+    # Extract port/area name
+    for el in soup.find_all(["a", "span", "div"]):
+        text = el.get_text(strip=True)
+        if "Port:" in text or "Area:" in text:
+            val = text.split(":")[-1].strip()
+            if val:
+                meta["port"] = val
+                break
 
     return meta

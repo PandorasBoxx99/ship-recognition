@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  vpnApi, jobsApi, shipsApi, classifyApi, trainingApi, augmentApi, statsApi, urlsApi,
+  vpnApi, jobsApi, shipsApi, shipEntitiesApi, detectionApi, classifyApi, trainingApi, augmentApi, statsApi, urlsApi,
 } from '@/api/client.ts'
 import type { JobCreate } from '@/types/index.ts'
 
@@ -76,7 +76,7 @@ export const useAnalyze = () =>
   useMutation({ mutationFn: (url: string) => jobsApi.analyze(url) })
 
 // Ships
-export const useShips = (params: { type?: string; search?: string; page?: number }) =>
+export const useShips = (params: { type?: string; source?: string; search?: string; page?: number; per_page?: number }) =>
   useQuery({
     queryKey: ['ships', params],
     queryFn: () => shipsApi.list(params),
@@ -88,6 +88,40 @@ export const useShip = (id: number | null) =>
     queryFn: () => shipsApi.get(id!),
     enabled: id !== null,
   })
+
+// Ship Entities (v2 — grouped)
+export const useShipEntities = (params: { search?: string; ship_type?: string; source?: string; page?: number; per_page?: number }) =>
+  useQuery({
+    queryKey: ['ship-entities', params],
+    queryFn: () => shipEntitiesApi.list(params),
+  })
+
+export const useShipEntity = (id: number | null) =>
+  useQuery({
+    queryKey: ['ship-entity', id],
+    queryFn: () => shipEntitiesApi.get(id!),
+    enabled: id !== null,
+  })
+
+export const useBackfillShips = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: shipEntitiesApi.backfill,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ship-entities'] }),
+  })
+}
+
+// Detection
+export const useDetectShip = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (shipId: number) => detectionApi.detectShip(shipId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ship-entity'] })
+      qc.invalidateQueries({ queryKey: ['ship-entities'] })
+    },
+  })
+}
 
 // Classification
 export const useClassifyUpload = () => {

@@ -10,30 +10,34 @@ RUN npm run build
 FROM python:3.11-slim AS backend
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (incl. Playwright browser deps)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc libffi-dev git && \
-    rm -rf /var/lib/apt/lists/*
+    gcc libffi-dev git \
+    # Playwright/Chromium dependencies
+    libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+    libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 \
+    libgbm1 libpango-1.0-0 libcairo2 libasound2 libxshmfence1 \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install CPU-only PyTorch first (much smaller than CUDA version: ~200MB vs ~2GB)
+# Install CPU-only PyTorch first (much smaller: ~200MB vs ~2GB)
 RUN pip install --no-cache-dir \
     "torch>=2.0.0,<3.0.0" "torchvision>=0.15.0,<1.0.0" \
     --index-url https://download.pytorch.org/whl/cpu
 
-# Install remaining Python dependencies
-COPY pyproject.toml ./
-RUN pip install --no-cache-dir --no-deps . && \
-    pip install --no-cache-dir \
-    "fastapi>=0.110.0" "uvicorn[standard]>=0.27.0" "python-multipart>=0.0.6" \
-    "sqlalchemy>=2.0.25" "alembic>=1.13.0" \
-    "pydantic>=2.5.0" "pydantic-settings>=2.1.0" \
-    "requests>=2.31.0" "beautifulsoup4>=4.12.0" \
-    "transformers>=4.36.0" "Pillow>=10.0.0" "safetensors>=0.4.0" \
-    "structlog>=24.1.0"
+# Install Python dependencies
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Install project as package
+COPY pyproject.toml ./
 COPY backend/ backend/
 COPY ml_engine.py ./
+RUN pip install --no-cache-dir -e ".[browser]"
+
+# Install Playwright Chromium
+RUN python -m playwright install chromium
+
+# Copy remaining application code
 COPY alembic.ini ./
 COPY run.py ./
 COPY schema.sql ./
@@ -45,7 +49,7 @@ COPY --from=frontend /app/frontend-dist frontend-dist/
 # Create data directories
 RUN mkdir -p downloads uploads augmented models/ship_classifier data logs
 
-# Download ML model at build time so it's baked into the image
+# Download ML model at build time
 RUN python -c " \
 from transformers import ViTForImageClassification, ViTImageProcessor; \
 name = 'dima806/10_ship_types_image_detection'; \
@@ -57,7 +61,7 @@ m.save_pretrained('models/ship_classifier'); \
 print('Model saved.'); \
 "
 
-# Smoke test: verify torch + model load + inference works
+# Smoke test
 RUN python -c " \
 import torch; \
 from transformers import ViTForImageClassification, ViTImageProcessor; \

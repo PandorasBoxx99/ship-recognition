@@ -67,8 +67,18 @@ desktop.ini
 .env
 .env.local
 
+# Claude Code local settings (may contain tokens)
+.claude/settings.local.json
+
+# Database backups
+*.db.backup
+
 # Logs
 *.log
+logs/
+
+# Prompt history (local notes)
+Prompt-historie.txt
 
 # Syncthing conflicts
 *.sync-conflict-*
