@@ -33,12 +33,18 @@ info "Pruefe Voraussetzungen..."
 
 # Python
 PYTHON=""
-for cmd in python3 python; do
+for cmd in python3 python python.exe; do
     if command -v "$cmd" &>/dev/null; then
         ver=$("$cmd" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || true)
-        if [ -n "$ver" ] && python3 -c "exit(0 if tuple(map(int,'$ver'.split('.'))) >= tuple(map(int,'$PYTHON_MIN'.split('.'))) else 1)" 2>/dev/null; then
-            PYTHON="$cmd"
-            break
+        if [ -n "$ver" ]; then
+            major=$(echo "$ver" | cut -d. -f1)
+            minor=$(echo "$ver" | cut -d. -f2)
+            req_major=$(echo "$PYTHON_MIN" | cut -d. -f1)
+            req_minor=$(echo "$PYTHON_MIN" | cut -d. -f2)
+            if [ "$major" -gt "$req_major" ] 2>/dev/null || { [ "$major" -eq "$req_major" ] && [ "$minor" -ge "$req_minor" ]; } 2>/dev/null; then
+                PYTHON="$cmd"
+                break
+            fi
         fi
     fi
 done
