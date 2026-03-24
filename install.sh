@@ -52,9 +52,9 @@ done
 info "Python gefunden: $PYTHON ($($PYTHON --version 2>&1))"
 
 # Node.js (fuer Frontend-Build)
-# On Windows Git Bash, node/npm may not be in PATH — try common locations
+# On Windows Git Bash, node/npm may not be in PATH — always add common locations
 for np in "/c/Program Files/nodejs" "/c/Program Files (x86)/nodejs" "$APPDATA/nvm/current" "$HOME/AppData/Roaming/nvm/current"; do
-    if [ -d "$np" ] && ! command -v node &>/dev/null; then
+    if [ -d "$np" ]; then
         export PATH="$np:$PATH"
     fi
 done
