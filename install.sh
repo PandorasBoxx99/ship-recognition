@@ -119,11 +119,22 @@ info "Installiere Playwright Chromium (fuer Cloudflare-Bypass)..."
 python -m playwright install chromium 2>/dev/null || warn "Playwright-Browser konnte nicht installiert werden. MarineTraffic-Scraping funktioniert evtl. nicht."
 
 # ---- Frontend bauen ----
+# Find npm command (may need full path on Windows Git Bash)
+NPM_CMD="npm"
+if ! command -v npm &>/dev/null; then
+    for np in "/c/Program Files/nodejs/npm" "/c/Program Files (x86)/nodejs/npm"; do
+        if [ -f "$np" ] || [ -f "${np}.cmd" ]; then
+            NPM_CMD="$np"
+            break
+        fi
+    done
+fi
+
 if [ "$BUILD_FRONTEND" = "1" ]; then
     info "Installiere Frontend-Abhaengigkeiten..."
-    (cd frontend && npm ci --quiet 2>/dev/null || npm install --quiet)
+    (cd frontend && "$NPM_CMD" ci --quiet 2>/dev/null || "$NPM_CMD" install --quiet)
     info "Baue Frontend..."
-    (cd frontend && npm run build)
+    (cd frontend && "$NPM_CMD" run build)
     info "Frontend gebaut: frontend-dist/"
 else
     if [ -d "frontend-dist" ]; then
