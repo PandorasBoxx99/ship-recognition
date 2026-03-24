@@ -206,6 +206,18 @@ else
     echo -e "  ${GREEN}✓${NC} ML-Modell bereits vorhanden"
 fi
 
+# ---- Freien Port finden ----
+find_free_port() {
+    local port=$1
+    while python -c "import socket; s=socket.socket(); s.settimeout(0.5); exit(0 if s.connect_ex(('127.0.0.1',$port))==0 else 1)" 2>/dev/null; do
+        warn "Port $port ist belegt"
+        port=$((port + 1))
+    done
+    echo "$port"
+}
+
+PORT=$(find_free_port "$PORT")
+
 # ---- Fertig ----
 PROJ_DIR=$(pwd)
 echo ""
@@ -222,12 +234,12 @@ echo -e "${YELLOW}│${NC} ${BOLD}Server stoppen:${NC}                          
 echo -e "${YELLOW}│${NC}   Strg+C                                                ${YELLOW}│${NC}"
 echo -e "${YELLOW}│${NC}                                                          ${YELLOW}│${NC}"
 echo -e "${YELLOW}│${NC} ${BOLD}Naechstes Mal starten (Windows PowerShell):${NC}              ${YELLOW}│${NC}"
-echo -e "${YELLOW}│${NC}   cd $PROJ_DIR${YELLOW}│${NC}"
+echo -e "${YELLOW}│${NC}   cd ${PROJ_DIR}  ${YELLOW}│${NC}"
 echo -e "${YELLOW}│${NC}   .\\.venv\\Scripts\\activate                               ${YELLOW}│${NC}"
 echo -e "${YELLOW}│${NC}   python run.py                                          ${YELLOW}│${NC}"
 echo -e "${YELLOW}│${NC}                                                          ${YELLOW}│${NC}"
 echo -e "${YELLOW}│${NC} ${BOLD}Naechstes Mal starten (Linux/macOS/Git Bash):${NC}            ${YELLOW}│${NC}"
-echo -e "${YELLOW}│${NC}   cd $PROJ_DIR${YELLOW}│${NC}"
+echo -e "${YELLOW}│${NC}   cd ${PROJ_DIR}  ${YELLOW}│${NC}"
 echo -e "${YELLOW}│${NC}   source .venv/bin/activate                              ${YELLOW}│${NC}"
 echo -e "${YELLOW}│${NC}   python run.py                                          ${YELLOW}│${NC}"
 echo -e "${YELLOW}│${NC}                                                          ${YELLOW}│${NC}"
@@ -240,4 +252,8 @@ echo ""
 info "Starte Server auf http://localhost:$PORT ..."
 info "Stoppen mit Strg+C"
 echo ""
-python run.py
+PORT=$PORT python -c "
+import uvicorn, os
+port = int(os.environ.get('PORT', 3025))
+uvicorn.run('backend.main:app', host='0.0.0.0', port=port)
+"
