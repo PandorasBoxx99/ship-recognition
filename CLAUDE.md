@@ -6,25 +6,37 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Ship Recognition Platform — modular web application for downloading, classifying, and training AI models on ship images. Scrapes maritime websites (ShipSpotting, VesselFinder, MarineTraffic, FleetMon), classifies using a ViT model, supports fine-tuning and augmentation. Documentation and UI are in German.
 
+## Requirements
+
+Python >= 3.11, Node.js >= 18 (for frontend).
+
 ## Commands
 
 ```bash
-# One-click install (creates venv, installs everything)
+# One-click install (creates venv, installs everything including frontend build)
 bash install.sh
 
 # Or manual install
-pip install -e ".[dev]"
+pip install -e ".[dev]"              # core + test deps
+pip install -e ".[dev,browser]"      # + Playwright for Cloudflare-protected sites
+playwright install chromium          # required after installing [browser] extra
 
 # Run the backend (serves on http://localhost:3025)
 python run.py
 
 # Run tests
-pytest
+pytest                                         # all tests
+pytest tests/test_api/test_stats.py            # single file
+pytest tests/test_api/test_stats.py -k test_fn # single test
 
-# Frontend dev server (with HMR, proxies to backend)
+# Lint
+ruff check backend/ tests/          # Python lint (E, F, I, N, W, UP rules)
+cd frontend && npx eslint .          # Frontend lint
+
+# Frontend dev server (with HMR, proxies /api /downloads /uploads to backend)
 cd frontend && npm run dev
 
-# Build frontend for production
+# Build frontend for production (outputs to ../frontend-dist/)
 cd frontend && npm run build
 
 # Run Alembic migrations
@@ -41,51 +53,54 @@ docker compose up --build
 **Backend (FastAPI)** — `backend/`:
 - `main.py` — App entry, lifespan, CORS, static mounts, router registration
 - `config.py` — pydantic-settings (reads `.env`)
-- `database.py` — SQLAlchemy engine, session, Base
-- `models/` — 14 ORM models: 7 legacy (Job, Item, Category, VPNLog, PredefinedURL, Classification, AugmentationLog) + 7 normalized (Ship, ShipAlias, Image, ImageAnnotation, ScrapeSource, ScrapeJob, MLModel, TrainingRun, InferenceLog, SyntheticJob)
-- `schemas/` — Pydantic request/response schemas (9 modules)
-- `routers/` — 10 routers: vpn, scrape, ships, classify, training, augmentation, stats, settings, models, ship_entities
-- `services/` — vpn_service, scrape_service, ml_service (wraps ml_engine.py)
+- `database.py` — SQLAlchemy 2.0+ engine, session, Base (SQLite with FK pragmas enabled)
+- `models/` — ORM models split across two eras (see Database below)
+- `schemas/` — Pydantic request/response schemas
+- `routers/` — 13 routers (vpn, scrape, ships, ship_entities, classify, training, augmentation, stats, settings, models, advanced, agent, detection, etc.)
+- `services/` — vpn_service, scrape_service, ml_service (wraps ml_engine.py), browser_scraper (Playwright), ship_sync_service
 - `migrations/` — Alembic (001_initial_v1, 002_normalize)
 
-**ML Engine** — `ml_engine.py` (preserved from v1, wrapped by `backend/services/ml_service.py`):
+**ML Engine** — `ml_engine.py` (root level, preserved from v1, wrapped by `backend/services/ml_service.py`):
 - Lazy-loaded ViT from HuggingFace (`dima806/10_ship_types_image_detection`)
-- classify_image(), start_training(), augment_images()
+- 10 ship types: Bulkers, Recreational, Sailboat, DDG, Container Ship, Tug, Aircraft Carrier, Cruise, Submarine, Car Carrier
+- Training and augmentation status tracked as **module-level globals** (`_training_status`, `_augment_status`) — not persisted to DB
 
-**Frontend** — `frontend/` (React + TypeScript + Vite + Tailwind):
-- 6 pages: Dashboard, Scraper, Ships, Classify, Training, Settings
-- TanStack Query for server state, Zustand for UI state
-- Builds to `frontend-dist/`, served by FastAPI
+**Frontend** — `frontend/` (React 19 + TypeScript + Vite + Tailwind):
+- TanStack Query for server state, Zustand for UI state, axios HTTP client
+- German route names: `/Schiffe`, `/Erkennung`, `/Training`, `/Einstellungen`, `/daten/scraper`
+- Builds to `frontend-dist/`, served by FastAPI as SPA (404 → index.html for client-side routing)
 
-**Database** — SQLite, 17 tables, Alembic migrations:
-- Legacy v1 tables: jobs, items, categories, vpn_log, predefined_urls, classifications, augmentation_log
-- Normalized v2 tables: ships, ship_aliases, images, image_annotations, scrape_sources, scrape_jobs, ml_models, training_runs, inference_logs, synthetic_jobs
+**Database** — SQLite (`schiffs-scraper.db`), Alembic migrations:
+- **v1 tables** (legacy, kept for backward compat): jobs, items, categories, vpn_log, predefined_urls, classifications, augmentation_log
+- **v2 tables** (normalized): ships, ship_aliases, images, image_annotations, scrape_sources, scrape_jobs, ml_models, training_runs, inference_logs, synthetic_jobs
 
 ## Key Patterns
 
 - **Service layer** separates business logic from route handlers
 - **Background threads** for scraping, training, augmentation, batch classification
-- **Lazy ML model loading** — loads on first classification request
-- **VPN integration** — NordVPN CLI; configurable via `VPN_ENABLED` in `.env`
+- **Lazy ML model loading** — loads on first classification request, not at startup
+- **VPN integration** — NordVPN CLI; `VPN_ENABLED` in `.env` (default: disabled in install.sh)
 - **SQLAlchemy `metadata_`** — Item model uses `metadata_` (mapped to column `metadata`) to avoid reserved name
-- **Dual API** — v1 endpoints for backward compat, v2 (`/api/v2/ships`) for normalized entities
+- **Dual API** — v1 endpoints (`/api/ships/*`) for backward compat, v2 (`/api/v2/ships/*`) for normalized entities
+- **Dual scraper backends** — BeautifulSoup + requests (standard), Playwright (Cloudflare bypass)
 - **Static file mounts** — `/downloads/` and `/uploads/` served by FastAPI
+- **CPU-only PyTorch** — install.sh uses `--index-url https://download.pytorch.org/whl/cpu` (~200MB vs full CUDA)
 
-## API Endpoints (35+ routes)
+## Testing
 
-Swagger docs at `/docs`. Key groups:
-- VPN: `/api/vpn/{status,connect,disconnect,rotate}`
-- Scraper: `/api/analyze`, `/api/jobs/*`
-- Ships v1: `/api/ships/*` (legacy)
-- Ships v2: `/api/v2/ships/*` (normalized CRUD)
-- Classification: `/api/classify`, `/api/classify/batch`, `/api/model/info`, `/api/classifications`
-- Models: `/api/models` (registry, activate)
-- Training: `/api/training/*`
-- Augmentation: `/api/augment/*`
-- Stats: `/api/stats`
-- Settings: `/api/urls`
+Tests use an **in-memory SQLite** database (StaticPool). Key fixtures in `tests/conftest.py`:
+- `test_engine` — session-scoped in-memory DB
+- `db_session` — per-test session with rollback
+- `seeded_db` — pre-populated with sample Jobs, Items, Classifications, PredefinedURLs
+- `client` — FastAPI TestClient with seeded DB (overrides `get_db` dependency)
+- `mock_ml` — patches `ml_service.classify_image` to avoid loading the real model
+- `mock_vpn` — patches VPN subprocess calls
+
+## CI
+
+GitHub Actions (`.github/workflows/ci.yml`): runs `ruff check backend/ tests/` on push to main/develop and PRs to main.
 
 ## Configuration
 
 `backend/config.py` via pydantic-settings. Override with `.env` (see `.env.example`).
-Key: `PORT`, `DATABASE_URL`, `VPN_ENABLED`, `MODEL_DIR`, `DOWNLOAD_DIR`, `DEBUG`.
+Key: `PORT`, `DATABASE_URL`, `VPN_ENABLED`, `MODEL_DIR`, `DOWNLOAD_DIR`, `DEBUG`, `CORS_ORIGINS`.
