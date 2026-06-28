@@ -8,11 +8,11 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from backend.config import settings
 from backend.database import get_db
 from backend.models.item import Item
 from backend.models.job import Job
 from backend.schemas.job import AnalyzeRequest, JobCreateRequest
-from backend.services import vpn_service
 from backend.services.scrape_service import (
     _scrape_log_path,
     analyze_website,
@@ -123,12 +123,11 @@ def start_job(job_id: int, db: Session = Depends(get_db)):
     if job.status == "running":
         raise HTTPException(status_code=400, detail="Job laeuft bereits")
 
-    if job.vpn_required:
-        vpn_status = vpn_service.get_vpn_status()
-        if not vpn_status.get("connected"):
-            raise HTTPException(
-                status_code=400, detail="VPN nicht verbunden. Bitte zuerst verbinden."
-            )
+    if job.vpn_required and not settings.VPN_ENABLED:
+        raise HTTPException(
+            status_code=400,
+            detail="VPN ist erforderlich, aber in den Einstellungen deaktiviert.",
+        )
 
     # Check if there are pending items (needed for resume)
     pending = db.query(Item).filter(Item.job_id == job_id, Item.status == "pending").count()

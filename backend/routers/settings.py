@@ -65,12 +65,7 @@ def _url_to_dict(url: PredefinedURL) -> dict:
 # ===== VPN Settings =====
 
 class VPNSettingsRequest(BaseModel):
-    vpn_provider: str | None = None
-    vpn_user: str | None = None
     vpn_api_key: str | None = None
-    vpn_default_country: str | None = None
-    vpn_auto_connect: bool | None = None
-    vpn_rotation: str | None = None
     vpn_enabled: bool | None = None
     vpn_proxy_country: str | None = None
 
@@ -80,14 +75,8 @@ def get_vpn_settings():
     """Get current VPN configuration from .env / settings."""
     return {
         "vpn_enabled": settings.VPN_ENABLED,
-        "vpn_provider": settings.VPN_PROVIDER,
-        "vpn_binary": settings.VPN_BINARY,
-        "vpn_user": settings.VPN_USER,
         "vpn_api_key": "***" if settings.VPN_API_KEY else "",
-        "vpn_default_country": settings.VPN_DEFAULT_COUNTRY,
         "vpn_proxy_country": settings.VPN_PROXY_COUNTRY,
-        "vpn_auto_connect": settings.VPN_AUTO_CONNECT,
-        "vpn_rotation": settings.VPN_ROTATION,
     }
 
 

@@ -8,34 +8,6 @@ import type { JobCreate } from '@/types/index.ts'
 export const useStats = () =>
   useQuery({ queryKey: ['stats'], queryFn: statsApi.get, refetchInterval: 30000 })
 
-// VPN
-export const useVPNStatus = () =>
-  useQuery({ queryKey: ['vpn-status'], queryFn: vpnApi.status, refetchInterval: 30000 })
-
-export const useVPNConnect = () => {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (country: string) => vpnApi.connect(country),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['vpn-status'] }),
-  })
-}
-
-export const useVPNDisconnect = () => {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: vpnApi.disconnect,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['vpn-status'] }),
-  })
-}
-
-export const useVPNRotate = () => {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: vpnApi.rotate,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['vpn-status'] }),
-  })
-}
-
 // VPN connection (direct + VPN IP, server, country) — live
 export const useVPNConnection = () =>
   useQuery({ queryKey: ['vpn-connection'], queryFn: vpnApi.connection, refetchInterval: 20000 })
@@ -48,7 +20,6 @@ export const useVPNConfig = () => {
       // apply immediately, then refetch to confirm the live IPs
       qc.setQueryData(['vpn-connection'], data)
       qc.invalidateQueries({ queryKey: ['vpn-connection'] })
-      qc.invalidateQueries({ queryKey: ['vpn-status'] })
     },
   })
 }

@@ -43,15 +43,9 @@ class Settings(BaseSettings):
     DEFAULT_MODEL_NAME: str = "dima806/10_ship_types_image_detection"
     DEFAULT_MODEL_FALLBACK: str = "google/vit-base-patch16-224-in21k"
 
-    # VPN
+    # VPN — NordVPN SOCKS5 proxy
     VPN_ENABLED: bool = True
-    VPN_BINARY: str = "nordvpn"
-    VPN_PROVIDER: str = "nordvpn"
-    VPN_USER: str = ""
-    VPN_API_KEY: str = ""
-    VPN_DEFAULT_COUNTRY: str = "Germany"
-    VPN_AUTO_CONNECT: bool = True
-    VPN_ROTATION: str = "manual"  # manual, per_job, every_50, every_100
+    VPN_API_KEY: str = ""  # NordVPN access token (from my.nordaccount.com)
     # SOCKS5 exit country for scraper traffic. NordVPN offers SOCKS5 only in a
     # limited set of countries (Netherlands, Sweden, United States).
     VPN_PROXY_COUNTRY: str = "Netherlands"

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  useVPNStatus, useVPNConnect, useVPNDisconnect, useVPNRotate,
+  useVPNConnection,
   useJobs, useCreateJob, useStartJob, usePauseJob, useDeleteJob,
   useAnalyze, useUrls,
 } from '@/hooks/useApi.ts'
@@ -112,10 +112,7 @@ function JobCard({ job, startJob, pauseJob, deleteJob }: {
 }
 
 export function ScraperPage() {
-  const { data: vpn } = useVPNStatus()
-  const vpnConnect = useVPNConnect()
-  const vpnDisconnect = useVPNDisconnect()
-  const vpnRotate = useVPNRotate()
+  const { data: vpn } = useVPNConnection()
 
   const { data: urls } = useUrls()
   const { data: jobs } = useJobs()
@@ -163,30 +160,22 @@ export function ScraperPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Ship Scraper</h1>
 
-      {/* VPN Control */}
+      {/* VPN status (read-only — SOCKS5 wird pro Job automatisch angewandt) */}
       <Card>
-        <h2 className="text-lg font-semibold mb-3">VPN-Steuerung</h2>
-        <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <div className={`w-3 h-3 rounded-full ${vpn?.connected ? 'bg-[var(--success)]' : 'bg-[var(--danger)]'}`} />
-            <span className="text-sm">
-              {vpn?.connected ? `Verbunden: ${vpn.country} (${vpn.ip})` : 'Nicht verbunden'}
+            <div className={`w-3 h-3 rounded-full ${vpn?.vpn_enabled ? 'bg-[var(--success)]' : 'bg-[var(--text-muted)]'}`} />
+            <span className="text-sm font-medium">
+              {vpn?.vpn_enabled
+                ? (vpn.protected
+                    ? `VPN aktiv — NordVPN ${vpn.proxy_country} (${vpn.vpn_ip})`
+                    : 'VPN aktiv — Exit-IP wird ermittelt…')
+                : 'VPN aus — Scraping über direkte IP'}
             </span>
           </div>
-          <div className="flex gap-2">
-            <Button size="sm" variant="success" onClick={() => vpnConnect.mutate('Germany')}
-              disabled={vpnConnect.isPending}>
-              Verbinden
-            </Button>
-            <Button size="sm" variant="danger" onClick={() => vpnDisconnect.mutate()}
-              disabled={vpnDisconnect.isPending}>
-              Trennen
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => vpnRotate.mutate()}
-              disabled={vpnRotate.isPending}>
-              IP wechseln
-            </Button>
-          </div>
+          <span className="text-xs text-[var(--text-muted)]">
+            Verwaltung unter Einstellungen → VPN
+          </span>
         </div>
       </Card>
 

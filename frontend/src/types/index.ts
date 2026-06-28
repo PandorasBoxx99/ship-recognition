@@ -53,14 +53,6 @@ export interface ShipListResponse {
   pages: number
 }
 
-export interface VPNStatus {
-  connected: boolean
-  country?: string | null
-  ip?: string | null
-  raw?: string
-  error?: string
-}
-
 export interface VPNConnection {
   vpn_enabled: boolean
   token_present: boolean

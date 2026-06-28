@@ -13,11 +13,10 @@ from backend.models.settings import PredefinedURL
 
 # Normalized v2 tables
 from backend.models.ship import Ship, ShipAlias
-from backend.models.vpn import VPNLog
 
 __all__ = [
     # v1
-    "Job", "Item", "Category", "VPNLog", "PredefinedURL",
+    "Job", "Item", "Category", "PredefinedURL",
     "Classification", "AugmentationLog",
     # v2
     "Ship", "ShipAlias", "Image", "ImageAnnotation",

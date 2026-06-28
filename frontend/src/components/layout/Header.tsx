@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { useVPNStatus } from '@/hooks/useApi.ts'
+import { useVPNConnection } from '@/hooks/useApi.ts'
 
 const tabs: { path: string; label: string; matchPrefix?: string }[] = [
   { path: '/Dashboard', label: 'Dashboard' },
@@ -12,7 +12,7 @@ const tabs: { path: string; label: string; matchPrefix?: string }[] = [
 ]
 
 export function Header() {
-  const { data: vpn } = useVPNStatus()
+  const { data: vpn } = useVPNConnection()
   const location = useLocation()
 
   const isTabActive = (tab: typeof tabs[0]) => {
@@ -48,9 +48,9 @@ export function Header() {
           </nav>
 
           <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${vpn?.connected ? 'bg-[var(--success)]' : 'bg-[var(--danger)]'}`} />
+            <div className={`w-2 h-2 rounded-full ${vpn?.vpn_enabled ? 'bg-[var(--success)]' : 'bg-[var(--text-muted)]'}`} />
             <span className="text-xs text-[var(--text-muted)]">
-              VPN: {vpn?.connected ? vpn.country ?? 'Verbunden' : 'Offline'}
+              VPN: {vpn?.vpn_enabled ? vpn.proxy_country ?? 'aktiv' : 'Aus'}
             </span>
           </div>
         </div>

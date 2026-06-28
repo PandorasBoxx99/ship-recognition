@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import axios from 'axios'
 import { useUrls, useAddUrl, useDeleteUrl, useModelInfo, useVPNConnection, useVPNConfig } from '@/hooks/useApi.ts'
@@ -27,9 +27,6 @@ export function SettingsPage() {
 
   // VPN settings — loaded from API, saved to .env
   const [vpnApiKey, setVpnApiKey] = useState('')
-  const [vpnAutoConnect, setVpnAutoConnect] = useState(true)
-  const [vpnCountry, setVpnCountry] = useState('Germany')
-  const [vpnRotation, setVpnRotation] = useState('manual')
   const [vpnTesting, setVpnTesting] = useState(false)
   const [vpnTestResult, setVpnTestResult] = useState<'success' | 'error' | null>(null)
   const [vpnTokenVisible, setVpnTokenVisible] = useState(false)
@@ -47,14 +44,6 @@ export function SettingsPage() {
   // Live VPN connection (direct + VPN IP, server, country) and real-time controls
   const { data: conn, isFetching: connFetching } = useVPNConnection()
   const vpnConfig = useVPNConfig()
-
-  useEffect(() => {
-    if (vpnSettings) {
-      setVpnAutoConnect(vpnSettings.vpn_auto_connect ?? true)
-      setVpnCountry(vpnSettings.vpn_default_country ?? 'Germany')
-      setVpnRotation(vpnSettings.vpn_rotation ?? 'manual')
-    }
-  }, [vpnSettings])
 
   // Training settings
   const [defaultEpochs, setDefaultEpochs] = useState(5)
@@ -225,47 +214,6 @@ export function SettingsPage() {
                 {vpnTestResult === 'success' && <span className="text-xl text-[var(--success)]">{'\u2714'}</span>}
                 {vpnTestResult === 'error' && <span className="text-xl text-[var(--danger)]">{'\u2718'}</span>}
               </div>
-            </div>
-          </Card>
-
-          <Card>
-            <h2 className="text-lg font-semibold mb-4">Verbindungsoptionen</h2>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs text-[var(--text-muted)] block mb-1">Standard-Land</label>
-                <select value={vpnCountry} onChange={(e) => setVpnCountry(e.target.value)}
-                  className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm">
-                  <option>Germany</option>
-                  <option>Netherlands</option>
-                  <option>Switzerland</option>
-                  <option>United States</option>
-                  <option>United Kingdom</option>
-                  <option>Sweden</option>
-                  <option>Austria</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-[var(--text-muted)] block mb-1">IP-Rotation</label>
-                <select value={vpnRotation} onChange={(e) => setVpnRotation(e.target.value)}
-                  className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm">
-                  <option value="manual">Manuell</option>
-                  <option value="per_job">Pro Job</option>
-                  <option value="every_50">Alle 50 Downloads</option>
-                  <option value="every_100">Alle 100 Downloads</option>
-                </select>
-              </div>
-            </div>
-            <div className="mt-4 flex gap-2 items-center">
-              <Button size="sm" onClick={() => saveVpn.mutate({
-                vpn_default_country: vpnCountry,
-                vpn_rotation: vpnRotation,
-                vpn_auto_connect: vpnAutoConnect,
-              })} disabled={saveVpn.isPending}>Speichern</Button>
-              <label className="flex items-center gap-2 text-sm cursor-pointer ml-4">
-                <input type="checkbox" checked={vpnAutoConnect}
-                  onChange={(e) => setVpnAutoConnect(e.target.checked)} />
-                Auto-Connect bei Scraper-Jobs
-              </label>
             </div>
           </Card>
         </div>
