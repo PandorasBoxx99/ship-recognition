@@ -4,7 +4,7 @@ import type {
   DetectionResult, DetectionStatus,
   Job, JobCreate, ModelInfo, PredefinedURL, Prediction, Ship, ShipListResponse,
   ShipEntityListResponse, ShipEntityDetail,
-  ShipStats, Stats, TrainingStatus, VPNStatus,
+  ShipStats, Stats, TrainingStatus, VPNConnection, VPNStatus,
 } from '@/types/index.ts'
 
 const client = axios.create({ baseURL: '' })
@@ -15,6 +15,9 @@ export const vpnApi = {
   connect: (country: string) => client.post<VPNStatus>('/api/vpn/connect', { country }).then(r => r.data),
   disconnect: () => client.post<VPNStatus>('/api/vpn/disconnect').then(r => r.data),
   rotate: () => client.post<VPNStatus>('/api/vpn/rotate').then(r => r.data),
+  connection: () => client.get<VPNConnection>('/api/vpn/connection').then(r => r.data),
+  setConfig: (data: { enabled?: boolean; proxy_country?: string }) =>
+    client.put<VPNConnection>('/api/vpn/config', data).then(r => r.data),
 }
 
 // Jobs

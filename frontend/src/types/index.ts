@@ -61,6 +61,17 @@ export interface VPNStatus {
   error?: string
 }
 
+export interface VPNConnection {
+  vpn_enabled: boolean
+  token_present: boolean
+  direct_ip: string | null
+  vpn_ip: string | null
+  proxy_country: string | null
+  server_host: string | null
+  available_countries: string[]
+  protected: boolean
+}
+
 export interface Prediction {
   label: string
   confidence: number

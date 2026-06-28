@@ -34,6 +34,7 @@ SOCKS5_PROXIES = {
     "United States": "us.socks.nordhold.net",
 }
 SOCKS5_PORT = 1080
+AVAILABLE_PROXY_COUNTRIES = list(SOCKS5_PROXIES.keys())
 
 # Cache the manual service credentials (username, password) for the process —
 # they are stable per account and only need to be fetched once.
@@ -140,6 +141,49 @@ def get_exit_ip(proxies: dict) -> str | None:
     except Exception as e:
         log.warning("vpn_exit_ip_failed", error=str(e))
     return None
+
+
+def get_direct_ip() -> str | None:
+    """Return the machine's real public IP (without the VPN proxy)."""
+    try:
+        resp = requests.get("https://api.ipify.org", timeout=10)
+        if resp.status_code == 200:
+            return resp.text.strip()
+    except Exception as e:
+        log.warning("vpn_direct_ip_failed", error=str(e))
+    return None
+
+
+def get_connection_info() -> dict:
+    """Rich VPN connection info for the frontend.
+
+    Includes the real (direct) IP, the VPN exit IP, the active SOCKS5 server and
+    country, and the list of selectable exit countries.
+    """
+    direct_ip = get_direct_ip()
+    info = {
+        "vpn_enabled": settings.VPN_ENABLED,
+        "token_present": _has_token(),
+        "direct_ip": direct_ip,
+        "vpn_ip": None,
+        "proxy_country": None,
+        "server_host": None,
+        "available_countries": AVAILABLE_PROXY_COUNTRIES,
+        "protected": False,
+    }
+
+    if settings.VPN_ENABLED and _has_token():
+        upstream = get_socks5_upstream()
+        if upstream:
+            host, _port, _user, _pass = upstream
+            info["proxy_country"] = resolve_proxy_country()
+            info["server_host"] = host
+            proxies = get_proxies()
+            vpn_ip = get_exit_ip(proxies) if proxies else None
+            info["vpn_ip"] = vpn_ip
+            info["protected"] = bool(vpn_ip and vpn_ip != direct_ip)
+
+    return info
 
 
 def test_token(token: str | None = None) -> dict:

@@ -82,3 +82,40 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def update_env_settings(updates: dict) -> list[str]:
+    """Persist key/value updates to the .env file and apply them to live settings.
+
+    Keys are lower-case setting names (e.g. "vpn_enabled"); they are written as
+    upper-case .env entries (VPN_ENABLED). None values are skipped. Returns the
+    list of applied keys. This makes settings changes take effect in real time
+    without a server restart.
+    """
+    env_path = BASE_DIR / ".env"
+    if env_path.exists():
+        content = env_path.read_text(encoding="utf-8")
+    else:
+        example = BASE_DIR / ".env.example"
+        content = example.read_text(encoding="utf-8") if example.exists() else ""
+
+    applied = {k: v for k, v in updates.items() if v is not None}
+    for key, value in applied.items():
+        env_key = key.upper()
+        str_value = str(value).lower() if isinstance(value, bool) else str(value)
+        if f"{env_key}=" in content:
+            lines = content.split("\n")
+            content = "\n".join(
+                f"{env_key}={str_value}" if line.startswith(f"{env_key}=") else line
+                for line in lines
+            )
+        else:
+            content = content.rstrip() + f"\n{env_key}={str_value}\n"
+    env_path.write_text(content, encoding="utf-8")
+
+    # Apply to the live settings object so changes take effect immediately
+    for key, value in applied.items():
+        attr = key.upper()
+        if hasattr(settings, attr):
+            object.__setattr__(settings, attr, value)
+    return list(applied.keys())

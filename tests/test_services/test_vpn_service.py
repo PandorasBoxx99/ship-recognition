@@ -144,3 +144,41 @@ def test_resolve_proxy_country_falls_back_to_supported(mock_settings):
     country = resolve_proxy_country()
 
     assert country in vpn_service.SOCKS5_PROXIES
+
+
+# --- connection info (direct + VPN IP) ---
+
+
+@patch("backend.services.vpn_service.get_direct_ip", return_value="185.169.0.170")
+@patch("backend.services.vpn_service.settings")
+def test_connection_info_vpn_disabled(mock_settings, mock_direct):
+    mock_settings.VPN_ENABLED = False
+    mock_settings.VPN_API_KEY = "tok"
+
+    info = vpn_service.get_connection_info()
+
+    assert info["vpn_enabled"] is False
+    assert info["direct_ip"] == "185.169.0.170"
+    assert info["vpn_ip"] is None
+    assert info["protected"] is False
+    assert info["available_countries"] == ["Netherlands", "Sweden", "United States"]
+
+
+@patch("backend.services.vpn_service.get_exit_ip", return_value="213.232.87.234")
+@patch("backend.services.vpn_service.get_proxies", return_value={"https": "socks5h://x"})
+@patch("backend.services.vpn_service.get_socks5_upstream",
+       return_value=("nl.socks.nordhold.net", 1080, "u", "p"))
+@patch("backend.services.vpn_service.get_direct_ip", return_value="185.169.0.170")
+@patch("backend.services.vpn_service.settings")
+def test_connection_info_protected(mock_settings, mock_direct, mock_up, mock_proxies, mock_exit):
+    mock_settings.VPN_ENABLED = True
+    mock_settings.VPN_API_KEY = "tok"
+    mock_settings.VPN_PROXY_COUNTRY = "Netherlands"
+    mock_settings.VPN_DEFAULT_COUNTRY = "Germany"
+
+    info = vpn_service.get_connection_info()
+
+    assert info["vpn_ip"] == "213.232.87.234"
+    assert info["server_host"] == "nl.socks.nordhold.net"
+    assert info["proxy_country"] == "Netherlands"
+    assert info["protected"] is True

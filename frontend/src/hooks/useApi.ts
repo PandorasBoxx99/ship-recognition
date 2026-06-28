@@ -36,6 +36,23 @@ export const useVPNRotate = () => {
   })
 }
 
+// VPN connection (direct + VPN IP, server, country) — live
+export const useVPNConnection = () =>
+  useQuery({ queryKey: ['vpn-connection'], queryFn: vpnApi.connection, refetchInterval: 20000 })
+
+export const useVPNConfig = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { enabled?: boolean; proxy_country?: string }) => vpnApi.setConfig(data),
+    onSuccess: (data) => {
+      // apply immediately, then refetch to confirm the live IPs
+      qc.setQueryData(['vpn-connection'], data)
+      qc.invalidateQueries({ queryKey: ['vpn-connection'] })
+      qc.invalidateQueries({ queryKey: ['vpn-status'] })
+    },
+  })
+}
+
 // Jobs
 export const useJobs = () =>
   useQuery({ queryKey: ['jobs'], queryFn: jobsApi.list, refetchInterval: 5000 })

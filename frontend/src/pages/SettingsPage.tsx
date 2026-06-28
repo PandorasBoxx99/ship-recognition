@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import axios from 'axios'
-import { useUrls, useAddUrl, useDeleteUrl, useModelInfo } from '@/hooks/useApi.ts'
+import { useUrls, useAddUrl, useDeleteUrl, useModelInfo, useVPNConnection, useVPNConfig } from '@/hooks/useApi.ts'
 import { Card } from '@/components/ui/Card.tsx'
 import { Button } from '@/components/ui/Button.tsx'
 import { showToast } from '@/components/ui/Toast.tsx'
@@ -43,6 +43,10 @@ export function SettingsPage() {
     mutationFn: (data: Record<string, unknown>) => axios.put('/api/settings/vpn', data).then(r => r.data),
     onSuccess: () => showToast('success', 'VPN-Einstellungen gespeichert'),
   })
+
+  // Live VPN connection (direct + VPN IP, server, country) and real-time controls
+  const { data: conn, isFetching: connFetching } = useVPNConnection()
+  const vpnConfig = useVPNConfig()
 
   useEffect(() => {
     if (vpnSettings) {
@@ -89,6 +93,77 @@ export function SettingsPage() {
       {/* ===== VPN ===== */}
       {activeSection === 'vpn' && (
         <div className="space-y-6">
+          {/* ----- Live-Verbindungsstatus ----- */}
+          <Card>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">
+                Verbindungsstatus
+                {connFetching && <span className="ml-2 text-xs text-[var(--text-muted)]">aktualisiere…</span>}
+              </h2>
+              <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                <span className={conn?.vpn_enabled ? 'text-[var(--success)]' : 'text-[var(--text-muted)]'}>
+                  {conn?.vpn_enabled ? 'VPN aktiv' : 'VPN aus (direkte IP)'}
+                </span>
+                <input
+                  type="checkbox"
+                  checked={!!conn?.vpn_enabled}
+                  disabled={vpnConfig.isPending}
+                  onChange={(e) => vpnConfig.mutate({ enabled: e.target.checked })}
+                />
+              </label>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="bg-[var(--bg)] rounded-lg p-3">
+                <div className="text-xs text-[var(--text-muted)]">Direkte IP</div>
+                <div className="font-mono text-sm mt-0.5">{conn?.direct_ip ?? '—'}</div>
+              </div>
+              <div className="bg-[var(--bg)] rounded-lg p-3">
+                <div className="text-xs text-[var(--text-muted)]">VPN-IP (Exit)</div>
+                <div className="font-mono text-sm mt-0.5">
+                  {conn?.vpn_ip ?? (conn?.vpn_enabled ? 'wird ermittelt…' : '—')}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4 mt-4">
+              <div>
+                <label className="text-xs text-[var(--text-muted)] block mb-1">Exit-Land (SOCKS5)</label>
+                <select
+                  value={conn?.proxy_country ?? 'Netherlands'}
+                  disabled={!conn?.vpn_enabled || vpnConfig.isPending}
+                  onChange={(e) => vpnConfig.mutate({ proxy_country: e.target.value })}
+                  className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm disabled:opacity-50"
+                >
+                  {(conn?.available_countries ?? ['Netherlands', 'Sweden', 'United States']).map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-[var(--text-muted)] mt-1">NordVPN-SOCKS5 nur NL / SE / US verfügbar</p>
+              </div>
+              <div>
+                <label className="text-xs text-[var(--text-muted)] block mb-1">Aktueller Server</label>
+                <div className="font-mono text-sm py-2">{conn?.server_host ?? '—'}</div>
+              </div>
+            </div>
+
+            <div className="mt-4 text-sm">
+              {conn?.protected ? (
+                <span className="text-[var(--success)]">
+                  {'✔'} Geschützt — Scraper-Traffic läuft über NordVPN ({conn.proxy_country})
+                </span>
+              ) : conn?.vpn_enabled ? (
+                <span className="text-[var(--danger)]">
+                  {'⚠'} VPN aktiv, aber Exit-IP nicht verifiziert (Token/Server prüfen)
+                </span>
+              ) : (
+                <span className="text-[var(--text-muted)]">
+                  Direkter Zugriff — Scraping läuft über deine echte IP
+                </span>
+              )}
+            </div>
+          </Card>
+
           <Card>
             <h2 className="text-lg font-semibold mb-4">NordVPN — Access Token</h2>
             <div className="space-y-4">
