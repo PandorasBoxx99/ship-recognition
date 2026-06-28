@@ -1,18 +1,17 @@
 """Dataset management endpoints — browse, split, balance, export."""
 
-import os
 import json
+import os
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func, case
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from backend.config import settings
 from backend.database import get_db
 from backend.models.image import Image
-from backend.models.ship import Ship
 from backend.models.ml import SyntheticJob
+from backend.models.ship import Ship
 
 router = APIRouter(prefix="/api/datasets", tags=["datasets"])
 
@@ -21,7 +20,9 @@ router = APIRouter(prefix="/api/datasets", tags=["datasets"])
 def dataset_overview(db: Session = Depends(get_db)):
     """Get full dataset overview: counts by class, split, quality."""
     total = db.query(func.count()).select_from(Image).scalar() or 0
-    synthetic = db.query(func.count()).select_from(Image).filter(Image.is_synthetic == 1).scalar() or 0
+    synthetic = db.query(func.count()).select_from(Image).filter(
+        Image.is_synthetic == 1
+    ).scalar() or 0
     real = total - synthetic
 
     # By split
@@ -203,7 +204,6 @@ class SyntheticRequest(BaseModel):
 @router.post("/synthetic/generate")
 def generate_synthetic(req: SyntheticRequest, db: Session = Depends(get_db)):
     """Start synthetic data generation with tracking."""
-    import os
     if not os.path.exists(req.source_dir):
         raise HTTPException(status_code=400, detail=f"Source directory not found: {req.source_dir}")
 
@@ -227,7 +227,7 @@ def generate_synthetic(req: SyntheticRequest, db: Session = Depends(get_db)):
 
     # Start augmentation
     from backend.services.ml_service import augment_images
-    result = augment_images(
+    augment_images(
         req.source_dir,
         num_per_image=req.num_per_image,
         transforms_config=req.transforms,

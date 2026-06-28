@@ -1,7 +1,13 @@
 """ORM models for normalized image entities."""
 
 from sqlalchemy import (
-    Column, DateTime, Float, ForeignKey, Integer, Text, func,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    Text,
+    func,
 )
 from sqlalchemy.orm import relationship
 
@@ -36,7 +42,9 @@ class Image(Base):
 
     ship = relationship("Ship", back_populates="images")
     parent_image = relationship("Image", remote_side="Image.id", backref="crops")
-    annotations = relationship("ImageAnnotation", back_populates="image", cascade="all, delete-orphan")
+    annotations = relationship(
+        "ImageAnnotation", back_populates="image", cascade="all, delete-orphan"
+    )
     inference_logs = relationship("InferenceLog", back_populates="image")
 
 

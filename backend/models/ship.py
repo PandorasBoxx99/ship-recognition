@@ -47,7 +47,8 @@ class ShipAlias(Base):
 
 
 # Add foreign key after table definition
-from sqlalchemy import ForeignKeyConstraint
+from sqlalchemy import ForeignKeyConstraint  # noqa: E402
+
 ShipAlias.__table__.append_constraint(
     ForeignKeyConstraint(["ship_id"], ["ships.id"])
 )

@@ -11,12 +11,11 @@ No CLI dependency — works on Windows, Linux, Docker.
 import base64
 
 import requests
+import structlog
 from sqlalchemy.orm import Session
 
 from backend.config import settings
 from backend.models.vpn import VPNLog
-
-import structlog
 
 log = structlog.get_logger()
 
@@ -100,7 +99,11 @@ def get_vpn_status() -> dict:
                 "token_valid": True,
             }
         elif resp.status_code == 401:
-            return {"connected": False, "error": "Token ungueltig oder abgelaufen", "token_valid": False}
+            return {
+                "connected": False,
+                "error": "Token ungueltig oder abgelaufen",
+                "token_valid": False,
+            }
         else:
             return {"connected": False, "error": f"API-Fehler: HTTP {resp.status_code}"}
     except requests.Timeout:

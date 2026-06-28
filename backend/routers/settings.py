@@ -1,6 +1,5 @@
 """Settings and predefined URL management endpoints."""
 
-import os
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException

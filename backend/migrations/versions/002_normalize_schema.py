@@ -4,15 +4,15 @@ Revision ID: 002_normalize
 Revises: initial_v1
 Create Date: 2026-03-22
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision: str = "002_normalize"
-down_revision: Union[str, None] = "initial_v1"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "initial_v1"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -234,7 +234,8 @@ def upgrade() -> None:
 
     # Seed the default model into the registry
     conn.execute(sa.text("""
-        INSERT INTO ml_models (name, version, model_type, framework, task_type, path, input_size, is_active)
+        INSERT INTO ml_models (name, version, model_type, framework, task_type, path,
+                               input_size, is_active)
         VALUES ('vit-ship-classifier', '1.0.0', 'classification', 'pytorch', 'ship_classification',
                 'models/ship_classifier', '224x224', 1)
     """))

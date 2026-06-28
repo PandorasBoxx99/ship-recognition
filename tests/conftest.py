@@ -15,13 +15,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.database import Base, get_db
 from backend.models import (
-    AugmentationLog,
-    Category,
     Classification,
     Item,
     Job,
     PredefinedURL,
-    VPNLog,
 )
 
 
@@ -43,8 +40,8 @@ def db_session(test_engine):
     """Fresh database session for each test — rolls back after test."""
     connection = test_engine.connect()
     transaction = connection.begin()
-    Session = sessionmaker(bind=connection)
-    session = Session()
+    session_factory = sessionmaker(bind=connection)
+    session = session_factory()
 
     yield session
 
@@ -126,12 +123,19 @@ def seeded_db(db_session):
 
 @pytest.fixture
 def mock_vpn():
-    """Mock VPN subprocess calls."""
-    with patch("backend.services.vpn_service.subprocess") as mock_sub:
-        mock_result = MagicMock()
-        mock_result.stdout = "Status: Connected\nCountry: Germany\nServer IP: 1.2.3.4\n"
-        mock_sub.run.return_value = mock_result
-        yield mock_sub
+    """Mock the NordVPN REST API so VPN calls return a connected status."""
+    with patch("backend.services.vpn_service.requests.get") as mock_get:
+        credentials = MagicMock()
+        credentials.status_code = 200
+        credentials.json.return_value = {"username": "test-user"}
+
+        servers = MagicMock()
+        servers.status_code = 200
+        servers.json.return_value = [{"name": "de1024", "station": "1.2.3.4"}]
+
+        # Each VPN operation issues a credentials check followed by a server lookup.
+        mock_get.side_effect = [credentials, servers] * 8
+        yield mock_get
 
 
 @pytest.fixture

@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 
 from backend.services.scrape_service import analyze_website, find_images
 
-
 MOCK_HTML = """
 <html>
 <head><title>Test Ship Site</title></head>

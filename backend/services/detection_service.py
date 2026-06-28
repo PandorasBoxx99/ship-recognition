@@ -32,8 +32,10 @@ def load_detection_model():
     if _detection_model is not None:
         return True
     try:
-        import torch  # noqa: F811 — lazy import to avoid DLL issues at startup
-        from torchvision.models.detection import fasterrcnn_resnet50_fpn, FasterRCNN_ResNet50_FPN_Weights
+        from torchvision.models.detection import (
+            FasterRCNN_ResNet50_FPN_Weights,
+            fasterrcnn_resnet50_fpn,
+        )
         log.info("loading_detection_model", model="fasterrcnn_resnet50_fpn")
         _detection_model = fasterrcnn_resnet50_fpn(weights=FasterRCNN_ResNet50_FPN_Weights.DEFAULT)
         _detection_model.eval()
@@ -264,7 +266,9 @@ def run_batch_detection(
             ships = db.query(Ship).all()
 
         total = len(ships)
-        _detection_status = {"running": True, "progress": 0, "total": total, "message": "Starte Erkennung..."}
+        _detection_status = {
+            "running": True, "progress": 0, "total": total, "message": "Starte Erkennung..."
+        }
 
         total_stats = {"images_processed": 0, "detections_found": 0, "crops_created": 0}
 

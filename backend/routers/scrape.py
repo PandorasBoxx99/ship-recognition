@@ -15,7 +15,6 @@ from backend.schemas.job import AnalyzeRequest, JobCreateRequest
 from backend.services import vpn_service
 from backend.services.scrape_service import (
     _scrape_log_path,
-    active_jobs,
     analyze_website,
     find_images,
     start_scraping_job,
@@ -127,7 +126,9 @@ def start_job(job_id: int, db: Session = Depends(get_db)):
     if job.vpn_required:
         vpn_status = vpn_service.get_vpn_status()
         if not vpn_status.get("connected"):
-            raise HTTPException(status_code=400, detail="VPN nicht verbunden. Bitte zuerst verbinden.")
+            raise HTTPException(
+                status_code=400, detail="VPN nicht verbunden. Bitte zuerst verbinden."
+            )
 
     # Check if there are pending items (needed for resume)
     pending = db.query(Item).filter(Item.job_id == job_id, Item.status == "pending").count()
@@ -174,7 +175,7 @@ def get_job_log(job_id: int, lines: int = 100):
     job_prefix = f"[Job {job_id}]"
     matching = []
     try:
-        with open(_scrape_log_path, "r", encoding="utf-8") as f:
+        with open(_scrape_log_path, encoding="utf-8") as f:
             for line in f:
                 if job_prefix in line:
                     matching.append(line.rstrip())

@@ -1,6 +1,6 @@
 """ORM model for VPN logs."""
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, func
+from sqlalchemy import Boolean, Column, DateTime, Integer, Text, func
 
 from backend.database import Base
 

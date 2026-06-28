@@ -1,49 +1,72 @@
-"""Tests for VPN service."""
+"""Tests for the VPN service (NordVPN REST-API based, no CLI)."""
 
 from unittest.mock import MagicMock, patch
 
 from backend.services.vpn_service import get_vpn_status
 
 
-@patch("backend.services.vpn_service.subprocess")
-def test_get_status_connected(mock_sub):
-    mock_result = MagicMock()
-    mock_result.stdout = "Status: Connected\nCountry: Germany\nServer IP: 10.0.0.1\n"
-    mock_sub.run.return_value = mock_result
+def _api_response(status_code, json_data):
+    """Build a fake requests.Response with given status and JSON body."""
+    resp = MagicMock()
+    resp.status_code = status_code
+    resp.json.return_value = json_data
+    return resp
+
+
+@patch("backend.services.vpn_service.requests.get")
+@patch("backend.services.vpn_service.settings")
+def test_get_status_connected(mock_settings, mock_get):
+    mock_settings.VPN_ENABLED = True
+    mock_settings.VPN_API_KEY = "valid-token"
+    mock_settings.VPN_DEFAULT_COUNTRY = "Germany"
+    # 1st call: credential check (dict), 2nd call: server recommendations (list)
+    mock_get.side_effect = [
+        _api_response(200, {"username": "ronny"}),
+        _api_response(200, [{"name": "de1024", "station": "1.2.3.4"}]),
+    ]
 
     status = get_vpn_status()
+
     assert status["connected"] is True
     assert status["country"] == "Germany"
-    assert status["ip"] == "10.0.0.1"
+    assert status["ip"] == "1.2.3.4"
+    assert status["server"] == "de1024"
+    assert status["token_valid"] is True
 
 
-@patch("backend.services.vpn_service.subprocess")
-def test_get_status_disconnected(mock_sub):
-    mock_result = MagicMock()
-    mock_result.stdout = "Status: Disconnected\n"
-    mock_sub.run.return_value = mock_result
+@patch("backend.services.vpn_service.requests.get")
+@patch("backend.services.vpn_service.settings")
+def test_get_status_invalid_token(mock_settings, mock_get):
+    mock_settings.VPN_ENABLED = True
+    mock_settings.VPN_API_KEY = "bad-token"
+    mock_get.return_value = _api_response(401, {})
 
     status = get_vpn_status()
+
     assert status["connected"] is False
-    assert status["country"] is None
+    assert status["token_valid"] is False
 
 
-@patch("backend.services.vpn_service.subprocess")
-def test_get_status_german_output(mock_sub):
-    mock_result = MagicMock()
-    mock_result.stdout = "Status: Verbunden\nLand: Deutschland\nIP: 10.0.0.2\n"
-    mock_sub.run.return_value = mock_result
-
-    status = get_vpn_status()
-    assert status["connected"] is True
-    assert status["country"] == "Deutschland"
-
-
-@patch("backend.services.vpn_service.subprocess")
-def test_get_status_timeout(mock_sub):
-    mock_sub.run.side_effect = Exception("Command timed out")
+@patch("backend.services.vpn_service.settings")
+def test_get_status_no_token(mock_settings):
+    mock_settings.VPN_ENABLED = True
+    mock_settings.VPN_API_KEY = ""
 
     status = get_vpn_status()
+
+    assert status["connected"] is False
+    assert "token" in status["error"].lower()
+
+
+@patch("backend.services.vpn_service.requests.get")
+@patch("backend.services.vpn_service.settings")
+def test_get_status_api_unreachable(mock_settings, mock_get):
+    mock_settings.VPN_ENABLED = True
+    mock_settings.VPN_API_KEY = "valid-token"
+    mock_get.side_effect = Exception("connection refused")
+
+    status = get_vpn_status()
+
     assert status["connected"] is False
     assert "error" in status
 
@@ -53,5 +76,6 @@ def test_disabled_vpn(mock_settings):
     mock_settings.VPN_ENABLED = False
 
     status = get_vpn_status()
+
     assert status["connected"] is False
-    assert "disabled" in status["error"].lower()
+    assert "deaktiviert" in status["error"].lower()

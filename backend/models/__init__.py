@@ -4,16 +4,16 @@
 from backend.models.augmentation import AugmentationLog
 from backend.models.category import Category
 from backend.models.classification import Classification
+from backend.models.image import Image, ImageAnnotation
 from backend.models.item import Item
 from backend.models.job import Job
+from backend.models.ml import InferenceLog, MLModel, SyntheticJob, TrainingRun
+from backend.models.scrape import ScrapeJob, ScrapeSource
 from backend.models.settings import PredefinedURL
-from backend.models.vpn import VPNLog
 
 # Normalized v2 tables
 from backend.models.ship import Ship, ShipAlias
-from backend.models.image import Image, ImageAnnotation
-from backend.models.scrape import ScrapeSource, ScrapeJob
-from backend.models.ml import MLModel, TrainingRun, InferenceLog, SyntheticJob
+from backend.models.vpn import VPNLog
 
 __all__ = [
     # v1

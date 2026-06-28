@@ -4,6 +4,7 @@ Uses Playwright with anti-detection to bypass bot protection.
 Falls back gracefully if Playwright is not installed.
 """
 
+import importlib.util
 import re
 import time
 
@@ -48,11 +49,10 @@ def find_marinetraffic_images(url: str, limit: int = 50) -> list[dict]:
     Returns list of dicts with: url, alt (ship name), source_page, ship_id,
     location, photographer, detail_url.
     """
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
+    if importlib.util.find_spec("playwright") is None:
         log.error("playwright_not_installed")
-        return [{"error": "Playwright nicht installiert. Run: pip install playwright && playwright install chromium"}]
+        return [{"error": "Playwright nicht installiert. "
+                 "Run: pip install playwright && playwright install chromium"}]
 
     photos_url = url
     if "/photos" not in url:
@@ -217,7 +217,12 @@ def find_marinetraffic_images(url: str, limit: int = 50) -> list[dict]:
 
         # Merge extra images from ship detail pages
         images.extend(extra_images)
-        log.info("marinetraffic_total_with_extras", listing=len(images) - len(extra_images), extras=len(extra_images), total=len(images))
+        log.info(
+            "marinetraffic_total_with_extras",
+            listing=len(images) - len(extra_images),
+            extras=len(extra_images),
+            total=len(images),
+        )
 
         return images
 

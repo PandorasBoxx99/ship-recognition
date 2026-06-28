@@ -4,19 +4,17 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.config import settings
-from backend.database import Base, engine, init_db
-from backend.utils.logging import setup_logging
-
 # Import all models so they're registered with Base
 import backend.models  # noqa: F401
-
-import structlog
+from backend.config import settings
+from backend.database import init_db
+from backend.utils.logging import setup_logging
 
 log = structlog.get_logger()
 
@@ -55,9 +53,23 @@ app.add_middleware(
 )
 
 # --- Register routers ---
-from backend.routers import advanced, agent, augmentation, classify, datasets, detection, docs, models, scrape
-from backend.routers import settings as settings_router
-from backend.routers import ship_entities, ships, stats, training, vpn
+from backend.routers import (  # noqa: E402
+    advanced,
+    agent,
+    augmentation,
+    classify,
+    datasets,
+    detection,
+    docs,
+    models,
+    scrape,
+    ship_entities,
+    ships,
+    stats,
+    training,
+    vpn,
+)
+from backend.routers import settings as settings_router  # noqa: E402
 
 app.include_router(vpn.router)
 app.include_router(scrape.router)

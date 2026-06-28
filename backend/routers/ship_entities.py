@@ -1,15 +1,14 @@
 """Ship entity CRUD endpoints (normalized ships table)."""
 
-import os
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.models.ship import Ship, ShipAlias
 from backend.models.image import Image
+from backend.models.ship import Ship, ShipAlias
 
 router = APIRouter(prefix="/api/v2/ships", tags=["ships-v2"])
 

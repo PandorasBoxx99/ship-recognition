@@ -2,19 +2,16 @@
 
 import json
 import os
-from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import structlog
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from backend.config import settings
 from backend.database import get_db
 from backend.models.image import Image, ImageAnnotation
 from backend.models.ship import Ship
-
-import structlog
 
 log = structlog.get_logger()
 
@@ -89,7 +86,7 @@ def _extract_embedding(image_path: str) -> list[float]:
     from PIL import Image as PILImage
 
     try:
-        from ml_engine import load_model, _model, _processor
+        from ml_engine import _model, _processor, load_model
         load_model()
 
         image = PILImage.open(image_path).convert("RGB")
@@ -193,11 +190,12 @@ def _generate_gradcam(image_path: str) -> tuple[str, str, float]:
     """Generate Grad-CAM heatmap for a ViT model prediction."""
     import base64
     import io
+
     import numpy as np
     import torch
     from PIL import Image as PILImage
 
-    from ml_engine import load_model, _model, _processor
+    from ml_engine import _model, _processor, load_model
 
     load_model()
 
@@ -358,10 +356,18 @@ def review_decide(req: ReviewDecision, db: Session = Depends(get_db)):
 def review_stats(db: Session = Depends(get_db)):
     """Get review queue statistics."""
     total = db.query(func.count()).select_from(Image).scalar() or 0
-    approved = db.query(func.count()).select_from(Image).filter(Image.review_status == "approved").scalar() or 0
-    rejected = db.query(func.count()).select_from(Image).filter(Image.review_status == "rejected").scalar() or 0
-    corrected = db.query(func.count()).select_from(Image).filter(Image.review_status == "corrected").scalar() or 0
-    pending = db.query(func.count()).select_from(Image).filter(Image.review_status == "pending").scalar() or 0
+    approved = db.query(func.count()).select_from(Image).filter(
+        Image.review_status == "approved"
+    ).scalar() or 0
+    rejected = db.query(func.count()).select_from(Image).filter(
+        Image.review_status == "rejected"
+    ).scalar() or 0
+    corrected = db.query(func.count()).select_from(Image).filter(
+        Image.review_status == "corrected"
+    ).scalar() or 0
+    pending = db.query(func.count()).select_from(Image).filter(
+        Image.review_status == "pending"
+    ).scalar() or 0
     unreviewed = total - approved - rejected - corrected - pending
 
     return {

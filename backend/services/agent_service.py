@@ -1,17 +1,22 @@
 """Agent service — action registry and system context for AI agent control."""
 
-import json
 from datetime import datetime
 from typing import Any
 
+import structlog
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.models import (
-    Classification, Image, Item, Job, MLModel, Ship, ScrapeSource, TrainingRun,
+    Classification,
+    Image,
+    Item,
+    Job,
+    MLModel,
+    ScrapeSource,
+    Ship,
+    TrainingRun,
 )
-
-import structlog
 
 log = structlog.get_logger()
 
@@ -96,7 +101,12 @@ def execute_action(action: str, params: dict, db: Session) -> dict:
     """Execute a registered agent action."""
     handler = AGENT_ACTIONS.get(action)
     if not handler:
-        return {"status": "error", "errors": [{"code": "UNKNOWN_ACTION", "message": f"Action '{action}' not found"}]}
+        return {
+            "status": "error",
+            "errors": [
+                {"code": "UNKNOWN_ACTION", "message": f"Action '{action}' not found"}
+            ],
+        }
 
     log.info("agent_action", action=action, params=params)
     try:
@@ -113,7 +123,9 @@ def get_system_context(db: Session) -> dict:
     total_ships = db.query(func.count()).select_from(Ship).scalar() or 0
     total_images = db.query(func.count()).select_from(Image).scalar() or 0
     total_items = db.query(func.count()).select_from(Item).scalar() or 0
-    downloaded = db.query(func.count()).select_from(Item).filter(Item.status == "downloaded").scalar() or 0
+    downloaded = db.query(func.count()).select_from(Item).filter(
+        Item.status == "downloaded"
+    ).scalar() or 0
     classified = db.query(func.count()).select_from(Classification).scalar() or 0
 
     # Active model
@@ -176,7 +188,11 @@ def get_system_context(db: Session) -> dict:
         },
         "last_training": {
             "status": last_training.status if last_training else None,
-            "finished_at": str(last_training.finished_at) if last_training and last_training.finished_at else None,
+            "finished_at": (
+                str(last_training.finished_at)
+                if last_training and last_training.finished_at
+                else None
+            ),
         },
         "type_distribution": [
             {"type": t.ship_type, "count": t.count} for t in type_dist

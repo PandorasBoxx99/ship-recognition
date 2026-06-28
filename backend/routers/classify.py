@@ -5,19 +5,18 @@ import os
 import threading
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+import structlog
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-import structlog
-
 log = structlog.get_logger()
 
-from backend.config import settings
-from backend.database import get_db
-from backend.models.classification import Classification
-from backend.models.item import Item
-from backend.services import ml_service
+from backend.config import settings  # noqa: E402
+from backend.database import get_db  # noqa: E402
+from backend.models.classification import Classification  # noqa: E402
+from backend.models.item import Item  # noqa: E402
+from backend.services import ml_service  # noqa: E402
 
 router = APIRouter(prefix="/api", tags=["classification"])
 

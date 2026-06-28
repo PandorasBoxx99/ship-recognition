@@ -1,17 +1,30 @@
-"""Tests for /api/vpn endpoints."""
+"""Tests for the /api/vpn endpoints (NordVPN REST-API based, no CLI)."""
 
 from unittest.mock import MagicMock, patch
 
 
-CONNECTED_OUTPUT = "Status: Connected\nCountry: Germany\nServer IP: 1.2.3.4\n"
-DISCONNECTED_OUTPUT = "Status: Disconnected\n"
+def _api_response(status_code, json_data):
+    """Build a fake requests.Response with given status and JSON body."""
+    resp = MagicMock()
+    resp.status_code = status_code
+    resp.json.return_value = json_data
+    return resp
 
 
-@patch("backend.services.vpn_service.subprocess")
-def test_vpn_status_connected(mock_sub, client):
-    mock_result = MagicMock()
-    mock_result.stdout = CONNECTED_OUTPUT
-    mock_sub.run.return_value = mock_result
+CREDENTIALS_OK = {"username": "ronny"}
+SERVERS_OK = [{"name": "de1024", "station": "1.2.3.4"}]
+
+
+@patch("backend.services.vpn_service.requests.get")
+@patch("backend.services.vpn_service.settings")
+def test_vpn_status_connected(mock_settings, mock_get, client):
+    mock_settings.VPN_ENABLED = True
+    mock_settings.VPN_API_KEY = "valid-token"
+    mock_settings.VPN_DEFAULT_COUNTRY = "Germany"
+    mock_get.side_effect = [
+        _api_response(200, CREDENTIALS_OK),
+        _api_response(200, SERVERS_OK),
+    ]
 
     resp = client.get("/api/vpn/status")
     assert resp.status_code == 200
@@ -21,11 +34,12 @@ def test_vpn_status_connected(mock_sub, client):
     assert data["ip"] == "1.2.3.4"
 
 
-@patch("backend.services.vpn_service.subprocess")
-def test_vpn_status_disconnected(mock_sub, client):
-    mock_result = MagicMock()
-    mock_result.stdout = DISCONNECTED_OUTPUT
-    mock_sub.run.return_value = mock_result
+@patch("backend.services.vpn_service.requests.get")
+@patch("backend.services.vpn_service.settings")
+def test_vpn_status_invalid_token(mock_settings, mock_get, client):
+    mock_settings.VPN_ENABLED = True
+    mock_settings.VPN_API_KEY = "bad-token"
+    mock_get.return_value = _api_response(401, {})
 
     resp = client.get("/api/vpn/status")
     assert resp.status_code == 200
@@ -33,12 +47,15 @@ def test_vpn_status_disconnected(mock_sub, client):
     assert data["connected"] is False
 
 
-@patch("backend.services.vpn_service.time.sleep")
-@patch("backend.services.vpn_service.subprocess")
-def test_vpn_connect(mock_sub, mock_sleep, client):
-    mock_result = MagicMock()
-    mock_result.stdout = CONNECTED_OUTPUT
-    mock_sub.run.return_value = mock_result
+@patch("backend.services.vpn_service.requests.get")
+@patch("backend.services.vpn_service.settings")
+def test_vpn_connect(mock_settings, mock_get, client):
+    mock_settings.VPN_ENABLED = True
+    mock_settings.VPN_API_KEY = "valid-token"
+    mock_get.side_effect = [
+        _api_response(200, CREDENTIALS_OK),  # test_token
+        _api_response(200, SERVERS_OK),       # recommendations
+    ]
 
     resp = client.post("/api/vpn/connect", json={"country": "Germany"})
     assert resp.status_code == 200
@@ -46,24 +63,23 @@ def test_vpn_connect(mock_sub, mock_sleep, client):
     assert data["connected"] is True
 
 
-@patch("backend.services.vpn_service.subprocess")
-def test_vpn_disconnect(mock_sub, client):
-    mock_result = MagicMock()
-    mock_result.stdout = DISCONNECTED_OUTPUT
-    mock_sub.run.return_value = mock_result
-
+def test_vpn_disconnect(client):
     resp = client.post("/api/vpn/disconnect")
     assert resp.status_code == 200
     data = resp.json()
     assert data["connected"] is False
 
 
-@patch("backend.services.vpn_service.time.sleep")
-@patch("backend.services.vpn_service.subprocess")
-def test_vpn_rotate(mock_sub, mock_sleep, client):
-    mock_result = MagicMock()
-    mock_result.stdout = CONNECTED_OUTPUT
-    mock_sub.run.return_value = mock_result
+@patch("backend.services.vpn_service.requests.get")
+@patch("backend.services.vpn_service.settings")
+def test_vpn_rotate(mock_settings, mock_get, client):
+    mock_settings.VPN_ENABLED = True
+    mock_settings.VPN_API_KEY = "valid-token"
+    mock_settings.VPN_DEFAULT_COUNTRY = "Germany"
+    mock_get.side_effect = [
+        _api_response(200, CREDENTIALS_OK),
+        _api_response(200, SERVERS_OK),
+    ]
 
     resp = client.post("/api/vpn/rotate")
     assert resp.status_code == 200
@@ -77,4 +93,4 @@ def test_vpn_disabled(mock_settings, client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["connected"] is False
-    assert "disabled" in data.get("error", "").lower()
+    assert "deaktiviert" in data.get("error", "").lower()

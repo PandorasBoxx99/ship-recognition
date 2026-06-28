@@ -4,7 +4,7 @@ import json
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, text
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.database import get_db

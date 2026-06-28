@@ -1,8 +1,6 @@
 """Documentation endpoint — serves plan, changelog, and project docs."""
 
-import os
 import subprocess
-from pathlib import Path
 
 from fastapi import APIRouter
 
@@ -181,16 +179,26 @@ def get_model_documentation():
             "huggingface_url": "https://huggingface.co/dima806/10_ship_types_image_detection",
             "kaggle_url": "https://www.kaggle.com/code/dima806/vessel-ship-type-detection",
             "classes": [
-                {"name": "Bulkers", "precision": 0.9927, "recall": 1.0000, "description": "Frachtschiffe / Massengutfrachter"},
-                {"name": "Container Ship", "precision": 1.0000, "recall": 0.9951, "description": "Containerschiffe"},
-                {"name": "Cruise", "precision": 1.0000, "recall": 1.0000, "description": "Kreuzfahrtschiffe"},
-                {"name": "Car Carrier", "precision": 0.9951, "recall": 0.9976, "description": "Autotransporter"},
-                {"name": "Tug", "precision": 0.9951, "recall": 0.9927, "description": "Schlepper"},
-                {"name": "Sailboat", "precision": 0.9975, "recall": 0.9853, "description": "Segelboote"},
-                {"name": "Recreational", "precision": 0.9902, "recall": 0.9927, "description": "Freizeitboote"},
-                {"name": "DDG", "precision": 0.9976, "recall": 1.0000, "description": "Zerstörer (Guided Missile Destroyer)"},
-                {"name": "Aircraft Carrier", "precision": 1.0000, "recall": 0.9976, "description": "Flugzeugträger"},
-                {"name": "Submarine", "precision": 0.9927, "recall": 1.0000, "description": "U-Boote"},
+                {"name": "Bulkers", "precision": 0.9927, "recall": 1.0000,
+                 "description": "Frachtschiffe / Massengutfrachter"},
+                {"name": "Container Ship", "precision": 1.0000, "recall": 0.9951,
+                 "description": "Containerschiffe"},
+                {"name": "Cruise", "precision": 1.0000, "recall": 1.0000,
+                 "description": "Kreuzfahrtschiffe"},
+                {"name": "Car Carrier", "precision": 0.9951, "recall": 0.9976,
+                 "description": "Autotransporter"},
+                {"name": "Tug", "precision": 0.9951, "recall": 0.9927,
+                 "description": "Schlepper"},
+                {"name": "Sailboat", "precision": 0.9975, "recall": 0.9853,
+                 "description": "Segelboote"},
+                {"name": "Recreational", "precision": 0.9902, "recall": 0.9927,
+                 "description": "Freizeitboote"},
+                {"name": "DDG", "precision": 0.9976, "recall": 1.0000,
+                 "description": "Zerstörer (Guided Missile Destroyer)"},
+                {"name": "Aircraft Carrier", "precision": 1.0000, "recall": 0.9976,
+                 "description": "Flugzeugträger"},
+                {"name": "Submarine", "precision": 0.9927, "recall": 1.0000,
+                 "description": "U-Boote"},
             ],
             "strengths": [
                 "Sehr hohe Genauigkeit (99.6%)",
@@ -268,9 +276,13 @@ def get_model_documentation():
             },
         ],
         "datasets": [
-            {"name": "Game of Deep Learning", "images": 8932, "classes": 5, "types": "Cargo, Tanker, Military, Carrier, Cruise", "source": "Kaggle"},
-            {"name": "ShipRSImageNet", "images": 3435, "classes": 50, "types": "50 Schiffsklassen (Satellit)", "source": "GitHub"},
-            {"name": "InaTechShips", "images": "k.A.", "classes": 5, "types": "Indonesische Schiffe", "source": "Paper (2025)"},
-            {"name": "DeepShip", "images": "k.A.", "classes": "variabel", "types": "Audio + Bild Kombination", "source": "Paper"},
+            {"name": "Game of Deep Learning", "images": 8932, "classes": 5,
+             "types": "Cargo, Tanker, Military, Carrier, Cruise", "source": "Kaggle"},
+            {"name": "ShipRSImageNet", "images": 3435, "classes": 50,
+             "types": "50 Schiffsklassen (Satellit)", "source": "GitHub"},
+            {"name": "InaTechShips", "images": "k.A.", "classes": 5,
+             "types": "Indonesische Schiffe", "source": "Paper (2025)"},
+            {"name": "DeepShip", "images": "k.A.", "classes": "variabel",
+             "types": "Audio + Bild Kombination", "source": "Paper"},
         ],
     }

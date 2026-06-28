@@ -11,15 +11,13 @@ from datetime import datetime
 from urllib.parse import urljoin, urlparse
 
 import requests
+import structlog
 from bs4 import BeautifulSoup
-from sqlalchemy.orm import Session
 
 from backend.config import settings
 from backend.database import SessionLocal
 from backend.models.item import Item
 from backend.models.job import Job
-
-import structlog
 
 log = structlog.get_logger()
 
@@ -29,8 +27,13 @@ _scrape_logger.setLevel(logging.DEBUG)
 _scrape_log_path = os.path.join(settings.LOG_DIR, "scrape.log")
 os.makedirs(settings.LOG_DIR, exist_ok=True)
 _fh = logging.FileHandler(_scrape_log_path, encoding="utf-8")
-_fh.setFormatter(logging.Formatter("%(asctime)s  %(levelname)-7s  %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+_fh.setFormatter(
+    logging.Formatter("%(asctime)s  %(levelname)-7s  %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+)
 _scrape_logger.addHandler(_fh)
+
+# Abort a scrape job after this many consecutive download failures
+MAX_CONSECUTIVE_FAILURES = 5
 
 
 def scrape_log(level: str, job_id: int | None, msg: str, **kw):
@@ -349,7 +352,8 @@ def run_scraping_job(job_id: int) -> None:
         pending_count = len(items)
         already_done = (job.downloaded or 0)
         scrape_log("info", job_id,
-                   f"START  url={job.url}  pending={pending_count}  already_done={already_done}  limit={job.limit_count}")
+                   f"START  url={job.url}  pending={pending_count}  "
+                   f"already_done={already_done}  limit={job.limit_count}")
 
         if pending_count == 0:
             scrape_log("info", job_id, "Keine ausstehenden Items — Job abgeschlossen")
@@ -377,7 +381,6 @@ def run_scraping_job(job_id: int) -> None:
                 return
 
         consecutive_failures = 0
-        MAX_CONSECUTIVE_FAILURES = 5
 
         for idx, item in enumerate(items, 1):
             # Check if job was paused
@@ -432,12 +435,14 @@ def run_scraping_job(job_id: int) -> None:
                     ship, _img = sync_item_to_ship(db, item)
                     scrape_log("info", job_id,
                                f"OK     [{idx}/{pending_count}]  {item.ship_name or 'Unbekannt'}  "
-                               f"photo_id={meta.get('photo_id', '-')}  size={os.path.getsize(save_path)}B  "
+                               f"photo_id={meta.get('photo_id', '-')}  "
+                               f"size={os.path.getsize(save_path)}B  "
                                f"ship_id={ship.id}")
                 except Exception as sync_err:
                     scrape_log("warning", job_id,
                                f"OK     [{idx}/{pending_count}]  {item.ship_name or 'Unbekannt'}  "
-                               f"photo_id={meta.get('photo_id', '-')}  size={os.path.getsize(save_path)}B  "
+                               f"photo_id={meta.get('photo_id', '-')}  "
+                               f"size={os.path.getsize(save_path)}B  "
                                f"sync_error={sync_err}")
             else:
                 item.status = "failed"
@@ -496,7 +501,8 @@ def run_scraping_job(job_id: int) -> None:
             pass
     finally:
         scrape_log("info", job_id,
-                   f"ENDE   succeeded={succeeded}  failed={failed}  abort_reason={abort_reason or 'keiner'}")
+                   f"ENDE   succeeded={succeeded}  failed={failed}  "
+                   f"abort_reason={abort_reason or 'keiner'}")
         if browser:
             try:
                 browser.close()

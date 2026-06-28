@@ -3,7 +3,6 @@
 import io
 from unittest.mock import patch
 
-
 MOCK_PREDICTIONS = [
     {"label": "Container Ship", "confidence": 0.87},
     {"label": "Tanker", "confidence": 0.08},
