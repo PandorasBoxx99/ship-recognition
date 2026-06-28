@@ -47,9 +47,11 @@ def test_vpn_status_invalid_token(mock_settings, mock_get, client):
     assert data["connected"] is False
 
 
+@patch("backend.services.vpn_service.get_exit_ip", return_value="213.232.87.234")
+@patch("backend.services.vpn_service.get_proxies", return_value={"https": "socks5h://x"})
 @patch("backend.services.vpn_service.requests.get")
 @patch("backend.services.vpn_service.settings")
-def test_vpn_connect(mock_settings, mock_get, client):
+def test_vpn_connect(mock_settings, mock_get, mock_proxies, mock_exit, client):
     mock_settings.VPN_ENABLED = True
     mock_settings.VPN_API_KEY = "valid-token"
     mock_get.side_effect = [
@@ -57,10 +59,11 @@ def test_vpn_connect(mock_settings, mock_get, client):
         _api_response(200, SERVERS_OK),       # recommendations
     ]
 
-    resp = client.post("/api/vpn/connect", json={"country": "Germany"})
+    resp = client.post("/api/vpn/connect", json={"country": "Netherlands"})
     assert resp.status_code == 200
     data = resp.json()
     assert data["connected"] is True
+    assert data["ip"] == "213.232.87.234"  # the verified SOCKS5 exit IP
 
 
 def test_vpn_disconnect(client):
@@ -70,9 +73,11 @@ def test_vpn_disconnect(client):
     assert data["connected"] is False
 
 
+@patch("backend.services.vpn_service.get_exit_ip", return_value="213.232.87.234")
+@patch("backend.services.vpn_service.get_proxies", return_value={"https": "socks5h://x"})
 @patch("backend.services.vpn_service.requests.get")
 @patch("backend.services.vpn_service.settings")
-def test_vpn_rotate(mock_settings, mock_get, client):
+def test_vpn_rotate(mock_settings, mock_get, mock_proxies, mock_exit, client):
     mock_settings.VPN_ENABLED = True
     mock_settings.VPN_API_KEY = "valid-token"
     mock_settings.VPN_DEFAULT_COUNTRY = "Germany"

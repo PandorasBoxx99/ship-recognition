@@ -1,8 +1,24 @@
-"""Tests for the VPN service (NordVPN REST-API based, no CLI)."""
+"""Tests for the VPN service (NordVPN REST-API + SOCKS5 proxy, no CLI)."""
 
 from unittest.mock import MagicMock, patch
 
-from backend.services.vpn_service import get_vpn_status
+import pytest
+
+from backend.services import vpn_service
+from backend.services.vpn_service import (
+    get_proxies,
+    get_service_credentials,
+    get_vpn_status,
+    resolve_proxy_country,
+)
+
+
+@pytest.fixture(autouse=True)
+def _reset_creds_cache():
+    """Service credentials are cached at module level — clear between tests."""
+    vpn_service._cached_creds = None
+    yield
+    vpn_service._cached_creds = None
 
 
 def _api_response(status_code, json_data):
@@ -79,3 +95,52 @@ def test_disabled_vpn(mock_settings):
 
     assert status["connected"] is False
     assert "deaktiviert" in status["error"].lower()
+
+
+# --- SOCKS5 proxy routing ---
+
+
+@patch("backend.services.vpn_service.requests.get")
+@patch("backend.services.vpn_service.settings")
+def test_get_service_credentials(mock_settings, mock_get):
+    mock_settings.VPN_API_KEY = "valid-token"
+    mock_get.return_value = _api_response(200, {"username": "svc-user", "password": "svc-pass"})
+
+    creds = get_service_credentials()
+
+    assert creds == ("svc-user", "svc-pass")
+
+
+@patch("backend.services.vpn_service.requests.get")
+@patch("backend.services.vpn_service.settings")
+def test_get_proxies_builds_socks_url(mock_settings, mock_get):
+    mock_settings.VPN_ENABLED = True
+    mock_settings.VPN_API_KEY = "valid-token"
+    mock_settings.VPN_PROXY_COUNTRY = "Netherlands"
+    mock_settings.VPN_DEFAULT_COUNTRY = "Germany"
+    mock_get.return_value = _api_response(200, {"username": "svc-user", "password": "svc-pass"})
+
+    proxies = get_proxies()
+
+    assert proxies is not None
+    expected = "socks5h://svc-user:svc-pass@nl.socks.nordhold.net:1080"
+    assert proxies["http"] == expected
+    assert proxies["https"] == expected
+
+
+@patch("backend.services.vpn_service.settings")
+def test_get_proxies_disabled_returns_none(mock_settings):
+    mock_settings.VPN_ENABLED = False
+
+    assert get_proxies() is None
+
+
+@patch("backend.services.vpn_service.settings")
+def test_resolve_proxy_country_falls_back_to_supported(mock_settings):
+    # Germany has no SOCKS5 proxy -> must fall back to a supported country
+    mock_settings.VPN_PROXY_COUNTRY = "Germany"
+    mock_settings.VPN_DEFAULT_COUNTRY = "Germany"
+
+    country = resolve_proxy_country()
+
+    assert country in vpn_service.SOCKS5_PROXIES

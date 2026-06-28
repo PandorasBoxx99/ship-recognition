@@ -362,6 +362,46 @@ def run_scraping_job(job_id: int) -> None:
             db.commit()
             return
 
+        # Route scraper HTTP traffic through NordVPN SOCKS5 when VPN is enabled.
+        # Fail-safe: if VPN is requested but the proxy can't be established or its
+        # exit IP can't be verified, abort instead of scraping with the real IP.
+        if settings.VPN_ENABLED:
+            from backend.services import vpn_service
+
+            proxies = vpn_service.get_proxies()
+            if not proxies:
+                abort_reason = (
+                    "VPN aktiviert, aber NordVPN-SOCKS5-Proxy konnte nicht aufgebaut "
+                    "werden (Token/Credentials pruefen). Abbruch — echte IP wird nicht genutzt."
+                )
+                scrape_log("error", job_id, abort_reason)
+                job.status = "failed"
+                job.error_message = abort_reason
+                db.commit()
+                return
+
+            _session.proxies.update(proxies)
+            exit_ip = vpn_service.get_exit_ip(proxies)
+            if not exit_ip:
+                _session.proxies.clear()
+                abort_reason = (
+                    "VPN-Proxy gesetzt, aber Exit-IP nicht verifizierbar — Abbruch "
+                    "(kein ungeschuetztes Scrapen)."
+                )
+                scrape_log("error", job_id, abort_reason)
+                job.status = "failed"
+                job.error_message = abort_reason
+                db.commit()
+                return
+
+            scrape_log(
+                "info", job_id,
+                f"VPN aktiv — Traffic ueber NordVPN SOCKS5  exit_ip={exit_ip}  "
+                f"land={vpn_service.resolve_proxy_country()}",
+            )
+        else:
+            _session.proxies.clear()
+
         # Launch browser if needed for Cloudflare-protected downloads
         use_browser = _needs_browser(job.url)
         page = None
@@ -372,6 +412,12 @@ def run_scraping_job(job_id: int) -> None:
                 page.goto(job.url, timeout=30000, wait_until="domcontentloaded")
                 time.sleep(5)
                 scrape_log("info", job_id, "Browser-Session gestartet (Cloudflare-Bypass)")
+                if settings.VPN_ENABLED:
+                    scrape_log(
+                        "warning", job_id,
+                        "Hinweis: Headless-Browser-Downloads laufen NICHT ueber den "
+                        "SOCKS5-Proxy (Chromium unterstuetzt keine SOCKS5-Authentifizierung).",
+                    )
             except Exception as e:
                 abort_reason = f"Browser konnte nicht gestartet werden: {e}"
                 scrape_log("error", job_id, abort_reason)

@@ -4,11 +4,16 @@ Uses api.nordvpn.com for all operations:
 - Token validation
 - Server recommendations
 - Account/connection status
+- Service credentials for SOCKS5 proxy routing
+
+Scraper traffic is tunneled through NordVPN's SOCKS5 proxies (see get_proxies),
+authenticated with the manual service credentials derived from the access token.
 
 No CLI dependency — works on Windows, Linux, Docker.
 """
 
 import base64
+import threading
 
 import requests
 import structlog
@@ -20,6 +25,20 @@ from backend.models.vpn import VPNLog
 log = structlog.get_logger()
 
 NORDVPN_API = "https://api.nordvpn.com"
+
+# NordVPN offers SOCKS5 proxies only in a limited set of countries.
+# Host pattern: <country-code>.socks.nordhold.net on port 1080.
+SOCKS5_PROXIES = {
+    "Netherlands": "nl.socks.nordhold.net",
+    "Sweden": "se.socks.nordhold.net",
+    "United States": "us.socks.nordhold.net",
+}
+SOCKS5_PORT = 1080
+
+# Cache the manual service credentials (username, password) for the process —
+# they are stable per account and only need to be fetched once.
+_creds_lock = threading.Lock()
+_cached_creds: tuple[str, str] | None = None
 
 
 def _api_headers(token: str | None = None) -> dict:
@@ -33,6 +52,85 @@ def _api_headers(token: str | None = None) -> dict:
 
 def _has_token() -> bool:
     return bool(settings.VPN_API_KEY)
+
+
+def get_service_credentials(
+    token: str | None = None, refresh: bool = False
+) -> tuple[str, str] | None:
+    """Fetch the NordVPN manual service credentials (username, password).
+
+    These are derived from the access token and are used to authenticate against
+    the SOCKS5 proxy / OpenVPN. Result is cached for the process.
+    """
+    global _cached_creds
+    with _creds_lock:
+        if _cached_creds and not refresh:
+            return _cached_creds
+
+        api_key = token or settings.VPN_API_KEY
+        if not api_key:
+            return None
+
+        try:
+            resp = requests.get(
+                f"{NORDVPN_API}/v1/users/services/credentials",
+                headers=_api_headers(api_key),
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                username = data.get("username")
+                password = data.get("password")
+                if username and password:
+                    _cached_creds = (username, password)
+                    return _cached_creds
+            log.warning("vpn_credentials_unavailable", status=resp.status_code)
+        except Exception as e:
+            log.warning("vpn_credentials_failed", error=str(e))
+        return None
+
+
+def resolve_proxy_country(country: str | None = None) -> str | None:
+    """Pick a SOCKS5-capable country, falling back to the configured default."""
+    for candidate in (country, settings.VPN_PROXY_COUNTRY, settings.VPN_DEFAULT_COUNTRY):
+        if candidate in SOCKS5_PROXIES:
+            return candidate
+    return "Netherlands" if "Netherlands" in SOCKS5_PROXIES else None
+
+
+def get_proxies(country: str | None = None) -> dict | None:
+    """Build a requests-style proxies dict routing through NordVPN SOCKS5.
+
+    Returns None when VPN is disabled, no token is set, credentials can't be
+    fetched, or no SOCKS5 server is available for the chosen country.
+    """
+    if not settings.VPN_ENABLED:
+        return None
+
+    creds = get_service_credentials()
+    if not creds:
+        return None
+
+    chosen = resolve_proxy_country(country)
+    host = SOCKS5_PROXIES.get(chosen) if chosen else None
+    if not host:
+        return None
+
+    username, password = creds
+    # socks5h => resolve DNS through the proxy too (no DNS leak)
+    url = f"socks5h://{username}:{password}@{host}:{SOCKS5_PORT}"
+    return {"http": url, "https": url}
+
+
+def get_exit_ip(proxies: dict) -> str | None:
+    """Return the public IP seen through the given proxies, or None on failure."""
+    try:
+        resp = requests.get("https://api.ipify.org", proxies=proxies, timeout=15)
+        if resp.status_code == 200:
+            return resp.text.strip()
+    except Exception as e:
+        log.warning("vpn_exit_ip_failed", error=str(e))
+    return None
 
 
 def test_token(token: str | None = None) -> dict:
@@ -97,6 +195,8 @@ def get_vpn_status() -> dict:
                 "server": server_name,
                 "username": data.get("username"),
                 "token_valid": True,
+                "mode": "socks5",
+                "proxy_country": resolve_proxy_country(),
             }
         elif resp.status_code == 401:
             return {
@@ -163,28 +263,39 @@ def connect_vpn(country: str, db: Session) -> dict:
     if not token_result.get("valid"):
         return {"connected": False, "error": token_result.get("error", "Token ungueltig")}
 
-    # Get best server for the country
+    # Get best server for the country (informational)
     servers = get_recommended_servers(country, 1)
     server_name = None
-    server_ip = None
     if "servers" in servers and servers["servers"]:
         server_name = servers["servers"][0].get("name")
-        server_ip = servers["servers"][0].get("ip")
 
-    # Log the connection
+    # Establish + verify the real SOCKS5 tunnel used for scraping.
+    proxy_country = resolve_proxy_country()
+    proxies = get_proxies(proxy_country)
+    exit_ip = get_exit_ip(proxies) if proxies else None
+    if not exit_ip:
+        return {
+            "connected": False,
+            "error": "SOCKS5-Proxy konnte nicht aufgebaut/verifiziert werden",
+            "proxy_country": proxy_country,
+        }
+
+    # Log the connection with the verified exit IP
     db.add(VPNLog(
-        action="connect", country=country,
-        ip_address=server_ip, success=True,
+        action="connect", country=proxy_country,
+        ip_address=exit_ip, success=True,
     ))
     db.commit()
 
-    log.info("vpn_connected", country=country, server=server_name, ip=server_ip)
+    log.info("vpn_connected", proxy_country=proxy_country, exit_ip=exit_ip)
 
     return {
         "connected": True,
         "country": country,
-        "ip": server_ip,
+        "ip": exit_ip,
         "server": server_name,
+        "proxy_country": proxy_country,
+        "mode": "socks5",
         "token_valid": True,
     }
 

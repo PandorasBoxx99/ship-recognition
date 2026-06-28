@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     VPN_DEFAULT_COUNTRY: str = "Germany"
     VPN_AUTO_CONNECT: bool = True
     VPN_ROTATION: str = "manual"  # manual, per_job, every_50, every_100
+    # SOCKS5 exit country for scraper traffic. NordVPN offers SOCKS5 only in a
+    # limited set of countries (Netherlands, Sweden, United States).
+    VPN_PROXY_COUNTRY: str = "Netherlands"
 
     # CORS
     CORS_ORIGINS: list[str] = [
