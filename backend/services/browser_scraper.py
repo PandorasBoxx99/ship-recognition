@@ -15,19 +15,26 @@ log = structlog.get_logger()
 MARINETRAFFIC_BASE = "https://www.marinetraffic.com"
 
 
-def _launch_browser():
-    """Launch Playwright Chromium with anti-detection settings."""
+def _launch_browser(proxy: str | None = None):
+    """Launch Playwright Chromium with anti-detection settings.
+
+    proxy: optional proxy server URL (e.g. "socks5://127.0.0.1:1080"). Used to
+    route the browser through the local NordVPN SOCKS5 bridge.
+    """
     from playwright.sync_api import sync_playwright
 
     pw = sync_playwright().start()
-    browser = pw.chromium.launch(
-        headless=False,
-        args=[
+    launch_kwargs = {
+        "headless": False,
+        "args": [
             "--disable-blink-features=AutomationControlled",
             "--disable-dev-shm-usage",
             "--no-sandbox",
         ],
-    )
+    }
+    if proxy:
+        launch_kwargs["proxy"] = {"server": proxy}
+    browser = pw.chromium.launch(**launch_kwargs)
     ctx = browser.new_context(
         user_agent=(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "

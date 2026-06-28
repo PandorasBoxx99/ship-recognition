@@ -98,8 +98,8 @@ def resolve_proxy_country(country: str | None = None) -> str | None:
     return "Netherlands" if "Netherlands" in SOCKS5_PROXIES else None
 
 
-def get_proxies(country: str | None = None) -> dict | None:
-    """Build a requests-style proxies dict routing through NordVPN SOCKS5.
+def get_socks5_upstream(country: str | None = None) -> tuple[str, int, str, str] | None:
+    """Return (host, port, username, password) for the NordVPN SOCKS5 proxy.
 
     Returns None when VPN is disabled, no token is set, credentials can't be
     fetched, or no SOCKS5 server is available for the chosen country.
@@ -116,9 +116,18 @@ def get_proxies(country: str | None = None) -> dict | None:
     if not host:
         return None
 
-    username, password = creds
+    return host, SOCKS5_PORT, creds[0], creds[1]
+
+
+def get_proxies(country: str | None = None) -> dict | None:
+    """Build a requests-style proxies dict routing through NordVPN SOCKS5."""
+    upstream = get_socks5_upstream(country)
+    if not upstream:
+        return None
+
+    host, port, username, password = upstream
     # socks5h => resolve DNS through the proxy too (no DNS leak)
-    url = f"socks5h://{username}:{password}@{host}:{SOCKS5_PORT}"
+    url = f"socks5h://{username}:{password}@{host}:{port}"
     return {"http": url, "https": url}
 
 

@@ -18,6 +18,8 @@ from backend.config import settings
 from backend.database import SessionLocal
 from backend.models.item import Item
 from backend.models.job import Job
+from backend.services import vpn_service
+from backend.services.socks_bridge import Socks5Bridge
 
 log = structlog.get_logger()
 
@@ -326,6 +328,7 @@ def run_scraping_job(job_id: int) -> None:
     db = SessionLocal()
     pw = None
     browser = None
+    bridge = None
     succeeded = 0
     failed = 0
     abort_reason = ""
@@ -366,8 +369,6 @@ def run_scraping_job(job_id: int) -> None:
         # Fail-safe: if VPN is requested but the proxy can't be established or its
         # exit IP can't be verified, abort instead of scraping with the real IP.
         if settings.VPN_ENABLED:
-            from backend.services import vpn_service
-
             proxies = vpn_service.get_proxies()
             if not proxies:
                 abort_reason = (
@@ -406,18 +407,34 @@ def run_scraping_job(job_id: int) -> None:
         use_browser = _needs_browser(job.url)
         page = None
         if use_browser:
+            # Route the browser through NordVPN too. Chromium can't authenticate to
+            # SOCKS5, so a local no-auth bridge forwards to the authed upstream.
+            browser_proxy = None
+            if settings.VPN_ENABLED:
+                upstream = vpn_service.get_socks5_upstream()
+                if not upstream:
+                    abort_reason = (
+                        "VPN aktiviert, aber SOCKS5-Upstream fuer den Browser nicht "
+                        "verfuegbar — Abbruch (kein ungeschuetztes Scrapen)."
+                    )
+                    scrape_log("error", job_id, abort_reason)
+                    job.status = "failed"
+                    job.error_message = abort_reason
+                    db.commit()
+                    return
+                bridge = Socks5Bridge(*upstream)
+                browser_proxy = f"socks5://127.0.0.1:{bridge.start()}"
             try:
                 from backend.services.browser_scraper import _launch_browser
-                pw, browser, page = _launch_browser()
+                pw, browser, page = _launch_browser(proxy=browser_proxy)
                 page.goto(job.url, timeout=30000, wait_until="domcontentloaded")
                 time.sleep(5)
-                scrape_log("info", job_id, "Browser-Session gestartet (Cloudflare-Bypass)")
-                if settings.VPN_ENABLED:
-                    scrape_log(
-                        "warning", job_id,
-                        "Hinweis: Headless-Browser-Downloads laufen NICHT ueber den "
-                        "SOCKS5-Proxy (Chromium unterstuetzt keine SOCKS5-Authentifizierung).",
-                    )
+                if browser_proxy:
+                    scrape_log("info", job_id,
+                               "Browser-Session gestartet (Cloudflare-Bypass, "
+                               "Traffic ueber NordVPN SOCKS5-Bruecke)")
+                else:
+                    scrape_log("info", job_id, "Browser-Session gestartet (Cloudflare-Bypass)")
             except Exception as e:
                 abort_reason = f"Browser konnte nicht gestartet werden: {e}"
                 scrape_log("error", job_id, abort_reason)
@@ -557,6 +574,11 @@ def run_scraping_job(job_id: int) -> None:
         if pw:
             try:
                 pw.stop()
+            except Exception:
+                pass
+        if bridge:
+            try:
+                bridge.stop()
             except Exception:
                 pass
         db.close()
