@@ -56,7 +56,7 @@ docker compose up --build
 - `database.py` — SQLAlchemy 2.0+ engine, session, Base (SQLite with FK pragmas enabled)
 - `models/` — ORM models split across two eras (see Database below)
 - `schemas/` — Pydantic request/response schemas
-- `routers/` — 13 routers (vpn, scrape, ships, ship_entities, classify, training, augmentation, stats, settings, models, advanced, agent, detection, etc.)
+- `routers/` — vpn, scrape, ship_entities, classify, training, augmentation, stats, settings, models, advanced, agent, datasets, detection, docs (the legacy v1 `ships` router was removed; ships are served only via v2 `ship_entities`)
 - `services/` — vpn_service, scrape_service, ml_service (wraps ml_engine.py), browser_scraper (Playwright), ship_sync_service
 - `migrations/` — Alembic (001_initial_v1, 002_normalize)
 
@@ -71,7 +71,7 @@ docker compose up --build
 - Builds to `frontend-dist/`, served by FastAPI as SPA (404 → index.html for client-side routing)
 
 **Database** — SQLite (`schiffs-scraper.db`), Alembic migrations:
-- **v1 tables** (legacy, kept for backward compat): jobs, items, categories, vpn_log, predefined_urls, classifications, augmentation_log
+- **v1 tables** (jobs/items = scrape queue / ingestion layer; rest legacy): jobs, items, categories, predefined_urls, classifications, augmentation_log
 - **v2 tables** (normalized): ships, ship_aliases, images, image_annotations, scrape_sources, scrape_jobs, ml_models, training_runs, inference_logs, synthetic_jobs
 
 ## Key Patterns
@@ -79,9 +79,9 @@ docker compose up --build
 - **Service layer** separates business logic from route handlers
 - **Background threads** for scraping, training, augmentation, batch classification
 - **Lazy ML model loading** — loads on first classification request, not at startup
-- **VPN integration** — NordVPN CLI; `VPN_ENABLED` in `.env` (default: disabled in install.sh)
+- **VPN integration** — NordVPN SOCKS5 proxy (no CLI). `VPN_API_KEY` (access token) + `VPN_PROXY_COUNTRY` (NL/SE/US) in `.env`. Scraper `requests` traffic and headless-browser traffic (via a local SOCKS5 bridge, `services/socks_bridge.py`) are tunneled. See `services/vpn_service.py`.
 - **SQLAlchemy `metadata_`** — Item model uses `metadata_` (mapped to column `metadata`) to avoid reserved name
-- **Dual API** — v1 endpoints (`/api/ships/*`) for backward compat, v2 (`/api/v2/ships/*`) for normalized entities
+- **Single read-truth for ships** — v2 `/api/v2/ships/*` (normalized ships/images) is the source of truth for ship data and stats; v1 jobs/items are the scrape queue that syncs into v2. (The old `/api/ships/*` was removed.)
 - **Dual scraper backends** — BeautifulSoup + requests (standard), Playwright (Cloudflare bypass)
 - **Static file mounts** — `/downloads/` and `/uploads/` served by FastAPI
 - **CPU-only PyTorch** — install.sh uses `--index-url https://download.pytorch.org/whl/cpu` (~200MB vs full CUDA)
@@ -94,7 +94,7 @@ Tests use an **in-memory SQLite** database (StaticPool). Key fixtures in `tests/
 - `seeded_db` — pre-populated with sample Jobs, Items, Classifications, PredefinedURLs
 - `client` — FastAPI TestClient with seeded DB (overrides `get_db` dependency)
 - `mock_ml` — patches `ml_service.classify_image` to avoid loading the real model
-- `mock_vpn` — patches VPN subprocess calls
+- `mock_vpn` — patches the NordVPN REST API (`requests.get`) so VPN calls return a connected status
 
 ## CI
 
