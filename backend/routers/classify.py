@@ -92,6 +92,7 @@ def classify_ship(ship_id: int, db: Session = Depends(get_db)):
 
 # --- Batch classification ---
 _batch_status = {"running": False, "progress": 0, "total": 0, "message": "Idle"}
+_batch_lock = threading.Lock()
 
 
 def _run_batch_classify(item_ids: list[int]):
@@ -143,8 +144,11 @@ def batch_classify(
     db: Session = Depends(get_db),
 ):
     """Classify all unclassified downloaded items. Optionally filter by job_id."""
-    if _batch_status["running"]:
-        raise HTTPException(status_code=409, detail="Batch classification already running")
+    # Atomic check-and-set so two requests can't both start a batch run.
+    with _batch_lock:
+        if _batch_status["running"]:
+            raise HTTPException(status_code=409, detail="Batch classification already running")
+        _batch_status["running"] = True
 
     from backend.models.item import Item
 
@@ -159,6 +163,8 @@ def batch_classify(
     item_ids = [row[0] for row in query.all()]
 
     if not item_ids:
+        with _batch_lock:
+            _batch_status["running"] = False
         return {"status": "nothing_to_classify", "count": 0}
 
     thread = threading.Thread(target=_run_batch_classify, args=(item_ids,), daemon=True)
@@ -169,8 +175,9 @@ def batch_classify(
 
 @router.get("/classify/batch/status")
 def batch_classify_status():
-    """Get batch classification progress."""
-    return _batch_status
+    """Get a snapshot of the batch classification progress."""
+    with _batch_lock:
+        return dict(_batch_status)
 
 
 @router.get("/model/info")

@@ -24,6 +24,12 @@ _model_loaded = False
 _training_status = {'running': False, 'progress': 0, 'message': '', 'history': []}
 _augment_status = {'running': False, 'progress': 0, 'total': 0, 'message': ''}
 
+# Locks guarding the module-level state above.
+# _model_lock serializes (potentially slow) model loading; _status_lock guards
+# the check-and-set when starting training/augmentation and reads of the status.
+_model_lock = threading.Lock()
+_status_lock = threading.Lock()
+
 # Ship type labels from config
 SHIP_LABELS = {
     0: "Bulkers",
@@ -43,11 +49,20 @@ _load_error = None
 
 
 def load_model():
-    """Load the ViT model and processor. Lazy-loaded on first use."""
-    global _model, _processor, _model_loaded, _load_error
+    """Load the ViT model and processor. Lazy-loaded on first use (thread-safe)."""
+    global _model_loaded
 
     if _model_loaded:
         return True
+    with _model_lock:
+        if _model_loaded:  # re-check after acquiring the lock (double-checked locking)
+            return True
+        return _load_model_locked()
+
+
+def _load_model_locked():
+    """Actual model loading. Caller must hold _model_lock."""
+    global _model, _processor, _model_loaded, _load_error
 
     # Step 1: verify torch works
     try:
@@ -236,8 +251,12 @@ def augment_images(source_dir, num_per_image=5, transforms_config=None):
     """
     global _augment_status
 
-    if _augment_status['running']:
-        return {'error': 'Augmentation already running'}
+    # Atomic check-and-set: claim the "running" flag before starting the thread
+    # so two near-simultaneous requests can't both launch an augmentation.
+    with _status_lock:
+        if _augment_status['running']:
+            return {'error': 'Augmentation already running'}
+        _augment_status = {'running': True, 'progress': 0, 'total': 0, 'message': 'Starting...'}
 
     default_config = {
         'horizontal_flip': True,
@@ -336,8 +355,9 @@ def augment_images(source_dir, num_per_image=5, transforms_config=None):
 
 
 def get_augment_status():
-    """Get current augmentation status."""
-    return _augment_status
+    """Get a snapshot of the current augmentation status."""
+    with _status_lock:
+        return dict(_augment_status)
 
 
 def start_training(dataset_dir, epochs=5, batch_size=8, learning_rate=5e-5):
@@ -349,12 +369,14 @@ def start_training(dataset_dir, epochs=5, batch_size=8, learning_rate=5e-5):
     """
     global _training_status
 
-    if _training_status['running']:
-        return {'error': 'Training already running'}
+    # Atomic check-and-set: claim the "running" flag before starting the thread.
+    with _status_lock:
+        if _training_status['running']:
+            return {'error': 'Training already running'}
+        _training_status = {'running': True, 'progress': 0, 'message': 'Initializing...', 'history': []}
 
     def _run_training():
         global _training_status
-        _training_status = {'running': True, 'progress': 0, 'message': 'Initializing...', 'history': []}
 
         try:
             import torch
@@ -502,5 +524,6 @@ def start_training(dataset_dir, epochs=5, batch_size=8, learning_rate=5e-5):
 
 
 def get_training_status():
-    """Get current training status."""
-    return _training_status
+    """Get a snapshot of the current training status."""
+    with _status_lock:
+        return dict(_training_status)

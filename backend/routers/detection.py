@@ -35,11 +35,8 @@ def batch_detect(
     confidence_threshold: float = Query(0.5, ge=0.1, le=1.0),
 ):
     """Start batch ship detection for all ships (background thread)."""
-    status = get_detection_status()
-    if status["running"]:
+    if not start_batch_detection(confidence_threshold=confidence_threshold):
         raise HTTPException(status_code=409, detail="Erkennung laeuft bereits")
-
-    start_batch_detection(confidence_threshold=confidence_threshold)
     return {"status": "started"}
 
 

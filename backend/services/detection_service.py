@@ -25,25 +25,35 @@ BOAT_CLASS_ID = 9
 _detection_model = None
 _detection_status = {"running": False, "progress": 0, "total": 0, "message": "Idle"}
 
+# _detection_model_lock serializes the (slow) model load; _detection_lock guards
+# the check-and-set when starting a batch run and reads of the status.
+_detection_model_lock = threading.Lock()
+_detection_lock = threading.Lock()
+
 
 def load_detection_model():
-    """Lazy-load Faster R-CNN with COCO weights."""
+    """Lazy-load Faster R-CNN with COCO weights (thread-safe)."""
     global _detection_model
     if _detection_model is not None:
         return True
-    try:
-        from torchvision.models.detection import (
-            FasterRCNN_ResNet50_FPN_Weights,
-            fasterrcnn_resnet50_fpn,
-        )
-        log.info("loading_detection_model", model="fasterrcnn_resnet50_fpn")
-        _detection_model = fasterrcnn_resnet50_fpn(weights=FasterRCNN_ResNet50_FPN_Weights.DEFAULT)
-        _detection_model.eval()
-        log.info("detection_model_loaded")
-        return True
-    except Exception as e:
-        log.error("detection_model_load_failed", error=str(e))
-        return False
+    with _detection_model_lock:
+        if _detection_model is not None:  # re-check after acquiring the lock
+            return True
+        try:
+            from torchvision.models.detection import (
+                FasterRCNN_ResNet50_FPN_Weights,
+                fasterrcnn_resnet50_fpn,
+            )
+            log.info("loading_detection_model", model="fasterrcnn_resnet50_fpn")
+            _detection_model = fasterrcnn_resnet50_fpn(
+                weights=FasterRCNN_ResNet50_FPN_Weights.DEFAULT
+            )
+            _detection_model.eval()
+            log.info("detection_model_loaded")
+            return True
+        except Exception as e:
+            log.error("detection_model_load_failed", error=str(e))
+            return False
 
 
 def detect_ships_in_image(
@@ -305,15 +315,29 @@ def run_batch_detection(
 def start_batch_detection(
     ship_ids: list[int] | None = None,
     confidence_threshold: float = 0.5,
-):
-    """Launch batch detection in a background thread."""
+) -> bool:
+    """Launch batch detection in a background thread.
+
+    Returns False (without starting) if a run is already in progress. The
+    check-and-set is atomic so two requests can't both launch a batch.
+    """
+    global _detection_status
+    with _detection_lock:
+        if _detection_status["running"]:
+            return False
+        _detection_status = {
+            "running": True, "progress": 0, "total": 0, "message": "Starte Erkennung..."
+        }
+
     thread = threading.Thread(
         target=run_batch_detection,
         args=(ship_ids, confidence_threshold),
         daemon=True,
     )
     thread.start()
+    return True
 
 
 def get_detection_status() -> dict:
-    return dict(_detection_status)
+    with _detection_lock:
+        return dict(_detection_status)

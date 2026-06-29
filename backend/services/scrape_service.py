@@ -63,8 +63,9 @@ HEADERS = {
 _session = requests.Session()
 _session.headers.update(HEADERS)
 
-# Global state for running jobs (matches original app.py pattern)
+# Global registry of running job threads, guarded by _jobs_lock.
 active_jobs: dict[int, threading.Thread] = {}
+_jobs_lock = threading.Lock()
 
 
 def analyze_website(url: str) -> dict:
@@ -582,12 +583,23 @@ def run_scraping_job(job_id: int) -> None:
             except Exception:
                 pass
         db.close()
-        active_jobs.pop(job_id, None)
+        with _jobs_lock:
+            active_jobs.pop(job_id, None)
 
 
-def start_scraping_job(job_id: int) -> None:
-    """Launch the scraping job in a background thread."""
+def start_scraping_job(job_id: int) -> bool:
+    """Launch the scraping job in a background thread.
+
+    Returns False (without starting) if a thread for this job is already alive,
+    so the same job can't run twice concurrently.
+    """
+    with _jobs_lock:
+        existing = active_jobs.get(job_id)
+        if existing and existing.is_alive():
+            return False
+        thread = threading.Thread(target=run_scraping_job, args=(job_id,), daemon=True)
+        active_jobs[job_id] = thread
+
     scrape_log("info", job_id, "Thread wird gestartet")
-    thread = threading.Thread(target=run_scraping_job, args=(job_id,), daemon=True)
     thread.start()
-    active_jobs[job_id] = thread
+    return True
