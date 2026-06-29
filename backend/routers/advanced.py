@@ -15,7 +15,7 @@ from backend.config import settings
 from backend.database import get_db
 from backend.models.image import Image, ImageAnnotation
 from backend.models.ship import Ship
-from backend.services import embedding_service, reid
+from backend.services import embedding_service, ocr_service, reid
 
 log = structlog.get_logger()
 
@@ -87,8 +87,15 @@ async def similarity_search_upload(
 
 
 def _run_similarity(image_path: str, image_id: int | None, top_k: int, model: str, db: Session):
-    """Shared body: encode, search, assess confidence, build the response."""
-    if model == "dinov2":
+    """Shared body: encode, search, assess confidence, build the response.
+
+    'dinov2' and 'dinov2_ocr' run the IDENTICAL visual search; OCR is only an
+    extra cross-check layered on top of the result, never altering it.
+    """
+    use_ocr = model == "dinov2_ocr"
+    visual_model = "dinov2" if model in ("dinov2", "dinov2_ocr") else model
+
+    if visual_model == "dinov2":
         scored = _dinov2_search(image_path, image_id, top_k, db)
     else:
         scored = _vit_search(image_path, top_k, db)
@@ -96,13 +103,42 @@ def _run_similarity(image_path: str, image_id: int | None, top_k: int, model: st
     if scored is None:  # embedding extraction failed -> classify-by-type fallback
         return _fallback_similarity(image_path, top_k, db)
 
-    return {
+    best = _assess_confidence(scored)
+    response = {
         "results": scored[:top_k],
-        "best_match": _assess_confidence(scored),
+        "best_match": best,
         "method": "embedding",
         "model": model,
         "threshold": settings.SIMILARITY_THRESHOLD,
-        "gallery_size": embedding_service.gallery_size() if model == "dinov2" else None,
+        "gallery_size": embedding_service.gallery_size() if visual_model == "dinov2" else None,
+    }
+    if use_ocr:
+        response["ocr"] = _ocr_crosscheck(image_path, best, db)
+    return response
+
+
+def _ocr_crosscheck(image_path: str, best_match: dict, db: Session) -> dict:
+    """Read hull text via OCR and check whether it confirms the top visual match.
+
+    Purely additive: the visual best_match is passed in unchanged.
+    """
+    info = ocr_service.extract_text(image_path)
+    if not info.get("available"):
+        return {"available": False, "text": "", "note": info.get("error", "OCR nicht verfügbar")}
+
+    ship = None
+    if best_match and best_match.get("ship_id"):
+        ship = db.query(Ship).filter(Ship.id == best_match["ship_id"]).first()
+    cross = (
+        ocr_service.text_matches_ship(info["text"], name=ship.name, imo=ship.imo, mmsi=ship.mmsi)
+        if ship
+        else {"match": False, "matched_on": None}
+    )
+    return {
+        "available": True,
+        "text": info["text"],
+        "confirms": cross["match"],
+        "matched_on": cross["matched_on"],
     }
 
 

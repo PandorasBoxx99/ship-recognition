@@ -54,6 +54,10 @@ browser = [
     # After install: playwright install chromium
     "playwright>=1.40.0",
 ]
+ocr = [
+    # Optional OCR cross-check (reads hull name/IMO). pip install -e ".[ocr]"
+    "easyocr>=1.7.0",
+]
 gpu = [
     # Install CUDA-specific torch separately:
     # pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121

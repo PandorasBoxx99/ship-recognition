@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     REID_ARCFACE_MARGIN: float = 0.5
     REID_LEARNING_RATE: float = 1e-3
 
+    # OCR (optional verification channel — reads hull name/IMO via EasyOCR).
+    # Pure visual similarity is unaffected; OCR only adds a cross-check.
+    OCR_LANGUAGES: list[str] = ["en"]
+
     # VPN — NordVPN SOCKS5 proxy
     VPN_ENABLED: bool = True
     VPN_API_KEY: str = ""  # NordVPN access token (from my.nordaccount.com)

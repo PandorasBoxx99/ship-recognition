@@ -94,7 +94,8 @@ export function WiedererkennungPage() {
               onChange={(e) => setModel(e.target.value)}
               className="bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm"
             >
-              <option value="dinov2">DINOv2 (empfohlen)</option>
+              <option value="dinov2">DINOv2 (ohne OCR)</option>
+              <option value="dinov2_ocr">DINOv2 + OCR</option>
               <option value="vit">ViT</option>
             </select>
             <Button onClick={runSearch} disabled={!file || search.isPending}>
@@ -132,6 +133,32 @@ export function WiedererkennungPage() {
               <div className="text-xs text-[var(--text-muted)]">
                 Unter der Schwelle ({pct(result?.threshold ?? 0)}) — Schiff vermutlich nicht in der Galerie.
               </div>
+            </div>
+          )}
+
+          {result?.ocr && (
+            <div className="mt-3 pt-3 border-t border-[var(--border)] text-sm">
+              <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-1">
+                OCR-Abgleich (zusätzlich)
+              </div>
+              {!result.ocr.available ? (
+                <div className="text-[var(--text-muted)]">
+                  Nicht verfügbar{result.ocr.note ? ` (${result.ocr.note})` : ''}
+                </div>
+              ) : (
+                <>
+                  {result.ocr.confirms ? (
+                    <div className="text-[var(--success)]">
+                      {'✔'} Durch OCR bestätigt ({result.ocr.matched_on})
+                    </div>
+                  ) : (
+                    <div className="text-[var(--text-muted)]">Kein OCR-Treffer zum Top-Schiff</div>
+                  )}
+                  <div className="text-xs text-[var(--text-muted)] mt-1 font-mono break-words">
+                    Erkannter Text: {result.ocr.text || '–'}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </Card>

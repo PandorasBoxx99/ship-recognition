@@ -368,10 +368,12 @@ def get_ml_docs():
                     "FAISS-Index speichert die Galerie persistent auf Platte (IndexFlatIP).",
                     "Suche = Nächste-Nachbarn; Konfidenz = Top-1-Cosinus, Margin = Top-1 − Top-2.",
                     "Open-Set: unter der Schwelle gilt 'kein sicherer Treffer'.",
+                    "Optional 'dinov2_ocr': zusätzlicher OCR-Abgleich (Rumpf-Name/IMO) — rein "
+                    "additiv, die visuelle Erkennung bleibt unverändert.",
                 ],
                 "parameters": [
                     {"name": "model", "default": "dinov2",
-                     "desc": "Embedding-Backend: 'dinov2' (empfohlen) oder 'vit'."},
+                     "desc": "Backend: 'dinov2' (empfohlen), 'dinov2_ocr' (+ OCR) oder 'vit'."},
                     {"name": "top_k", "default": "10",
                      "desc": "Anzahl zurückgegebener ähnlichster Bilder."},
                 ],

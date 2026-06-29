@@ -250,6 +250,14 @@ export interface SimilarityBestMatch {
   reason: string
 }
 
+export interface SimilarityOcr {
+  available: boolean
+  text: string
+  confirms?: boolean
+  matched_on?: string | null
+  note?: string
+}
+
 export interface SimilarityResponse {
   results: SimilarityMatch[]
   best_match: SimilarityBestMatch
@@ -257,6 +265,7 @@ export interface SimilarityResponse {
   model: string
   threshold: number
   gallery_size: number | null
+  ocr?: SimilarityOcr
 }
 
 export interface ReidReadiness {
