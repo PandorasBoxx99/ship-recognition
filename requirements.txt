@@ -25,6 +25,9 @@ transformers>=4.36.0
 Pillow>=10.0.0
 safetensors>=0.4.0
 
+# Visual similarity / ship re-identification (DINOv2 embeddings + FAISS index)
+faiss-cpu>=1.7.4
+
 # Logging
 structlog>=24.1.0
 

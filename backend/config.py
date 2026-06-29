@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "facebook/dinov2-base"  # dinov2-small for CPU-only setups
     SIMILARITY_THRESHOLD: float = 0.6  # open-set: below this -> "no confident match"
     SIMILARITY_MARGIN: float = 0.05  # top1 - top2 must exceed this to be "confident"
+    # Add each newly scraped image to the FAISS gallery automatically. Off by
+    # default because DINOv2 inference is slow on CPU; enable it with a GPU.
+    EMBEDDING_AUTO_INDEX: bool = False
 
     # VPN — NordVPN SOCKS5 proxy
     VPN_ENABLED: bool = True

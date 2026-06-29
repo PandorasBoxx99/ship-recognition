@@ -48,30 +48,85 @@ def similarity_search(
     if not image_path or not os.path.exists(image_path):
         raise HTTPException(status_code=400, detail="Valid image_path or image_id required")
 
-    embed = embedding_service.extract if model == "dinov2" else _extract_embedding
+    if model == "dinov2":
+        scored = _dinov2_search(image_path, image_id, top_k, db)
+    else:
+        scored = _vit_search(image_path, top_k, db)
 
-    try:
-        query_embedding = embed(image_path)
-    except Exception as e:
-        log.warning("embedding_extraction_failed", model=model, error=str(e))
+    if scored is None:  # embedding extraction failed -> classify-by-type fallback
         return _fallback_similarity(image_path, top_k, db)
 
-    # Compare against the gallery (images linked to a ship entity)
+    return {
+        "results": scored[:top_k],
+        "best_match": _assess_confidence(scored),
+        "method": "embedding",
+        "model": model,
+        "threshold": settings.SIMILARITY_THRESHOLD,
+        "gallery_size": embedding_service.gallery_size() if model == "dinov2" else None,
+    }
+
+
+def _dinov2_search(image_path: str, image_id: int | None, top_k: int, db: Session):
+    """FAISS-backed nearest-neighbour search over the persistent DINOv2 gallery."""
+    try:
+        qvec = embedding_service.extract(image_path)
+    except Exception as e:
+        log.warning("embedding_extraction_failed", model="dinov2", error=str(e))
+        return None
+
+    matches = embedding_service.search(qvec, top_k + 1)
+    matches = [(iid, s) for iid, s in matches if iid != image_id][:top_k]
+    if not matches:
+        return []
+
+    id_list = [iid for iid, _ in matches]
+    rows = {
+        img.id: (img, ship_type, ship_name)
+        for img, ship_type, ship_name in (
+            db.query(Image, Ship.ship_type, Ship.name)
+            .outerjoin(Ship, Image.ship_id == Ship.id)
+            .filter(Image.id.in_(id_list))
+            .all()
+        )
+    }
+    scored = []
+    for iid, sim in matches:  # already ordered by similarity
+        row = rows.get(iid)
+        if not row:
+            continue
+        img, ship_type, ship_name = row
+        scored.append({
+            "image_id": iid,
+            "ship_id": img.ship_id,
+            "file_path": img.file_path,
+            "ship_type": ship_type,
+            "ship_name": ship_name,
+            "similarity": round(sim, 4),
+        })
+    return scored
+
+
+def _vit_search(image_path: str, top_k: int, db: Session):
+    """Brute-force search using ViT features (no persistent index, capped at 500)."""
+    try:
+        query_embedding = _extract_embedding(image_path)
+    except Exception as e:
+        log.warning("embedding_extraction_failed", model="vit", error=str(e))
+        return None
+
     images = (
         db.query(Image, Ship.ship_type, Ship.name)
         .outerjoin(Ship, Image.ship_id == Ship.id)
         .filter(Image.file_path != image_path)
-        .limit(500)  # limit for performance
+        .limit(500)
         .all()
     )
-
     scored = []
     for img, ship_type, ship_name in images:
         if not img.file_path or not os.path.exists(img.file_path):
             continue
         try:
-            emb = embed(img.file_path)
-            sim = _cosine_similarity(query_embedding, emb)
+            sim = _cosine_similarity(query_embedding, _extract_embedding(img.file_path))
             scored.append({
                 "image_id": img.id,
                 "ship_id": img.ship_id,
@@ -82,16 +137,8 @@ def similarity_search(
             })
         except Exception:
             continue
-
     scored.sort(key=lambda x: x["similarity"], reverse=True)
-    best = _assess_confidence(scored)
-    return {
-        "results": scored[:top_k],
-        "best_match": best,
-        "method": "embedding",
-        "model": model,
-        "threshold": settings.SIMILARITY_THRESHOLD,
-    }
+    return scored
 
 
 def _assess_confidence(scored: list[dict]) -> dict:
@@ -125,13 +172,13 @@ def _assess_confidence(scored: list[dict]) -> dict:
 
 @router.post("/similarity/reindex")
 def similarity_reindex(db: Session = Depends(get_db)):
-    """Precompute DINOv2 embeddings for all gallery images (warms the cache)."""
-    paths = [
-        img.file_path
-        for img in db.query(Image).filter(Image.file_path.isnot(None)).limit(2000).all()
+    """Rebuild the persistent DINOv2 FAISS gallery from all stored images."""
+    items = [
+        (img.id, img.file_path)
+        for img in db.query(Image).filter(Image.file_path.isnot(None)).limit(5000).all()
         if img.file_path and os.path.exists(img.file_path)
     ]
-    return embedding_service.reindex_gallery(paths)
+    return embedding_service.rebuild(items)
 
 
 def _extract_embedding(image_path: str) -> list[float]:

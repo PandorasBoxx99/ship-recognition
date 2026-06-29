@@ -502,6 +502,13 @@ def run_scraping_job(job_id: int) -> None:
                                f"photo_id={meta.get('photo_id', '-')}  "
                                f"size={os.path.getsize(save_path)}B  "
                                f"ship_id={ship.id}")
+                    # Optionally add the new image to the DINOv2 similarity gallery
+                    if settings.EMBEDDING_AUTO_INDEX and _img and _img.file_path:
+                        try:
+                            from backend.services import embedding_service
+                            embedding_service.add_image(_img.file_path, _img.id)
+                        except Exception as emb_err:
+                            scrape_log("warning", job_id, f"embedding_index_failed: {emb_err}")
                 except Exception as sync_err:
                     scrape_log("warning", job_id,
                                f"OK     [{idx}/{pending_count}]  {item.ship_name or 'Unbekannt'}  "

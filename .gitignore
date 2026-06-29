@@ -41,6 +41,9 @@ data/val/
 data/test/
 data/synthetic/
 
+# FAISS similarity gallery (generated, can be rebuilt via /similarity/reindex)
+*.faiss
+
 # Frontend build output
 frontend-dist/
 frontend/node_modules/
