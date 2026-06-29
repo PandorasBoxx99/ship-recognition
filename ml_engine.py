@@ -5,6 +5,7 @@ Uses ViT (Vision Transformer) model from HuggingFace
 
 import os
 import io
+import gc
 import json
 import glob
 import random
@@ -133,9 +134,11 @@ def classify_image(image_data):
 
     try:
         if isinstance(image_data, (bytes, bytearray)):
-            image = Image.open(io.BytesIO(image_data)).convert('RGB')
+            with Image.open(io.BytesIO(image_data)) as im:
+                image = im.convert('RGB')  # convert() returns a loaded in-memory copy
         elif isinstance(image_data, str):
-            image = Image.open(image_data).convert('RGB')
+            with Image.open(image_data) as im:
+                image = im.convert('RGB')
         elif isinstance(image_data, Image.Image):
             image = image_data.convert('RGB')
         else:
@@ -314,7 +317,8 @@ def augment_images(source_dir, num_per_image=5, transforms_config=None):
             generated = 0
             for img_path in source_images:
                 try:
-                    img = Image.open(img_path).convert('RGB')
+                    with Image.open(img_path) as im:
+                        img = im.convert('RGB')  # loaded in-memory copy; file closed after
                     base_name = os.path.splitext(os.path.basename(img_path))[0]
 
                     for i in range(num_per_image):
@@ -414,7 +418,8 @@ def start_training(dataset_dir, epochs=5, batch_size=8, learning_rate=5e-5):
                     return len(self.image_paths)
 
                 def __getitem__(self, idx):
-                    image = Image.open(self.image_paths[idx]).convert('RGB')
+                    with Image.open(self.image_paths[idx]) as im:
+                        image = im.convert('RGB')
                     inputs = self.processor(images=image, return_tensors="pt")
                     inputs = {k: v.squeeze(0) for k, v in inputs.items()}
                     inputs['labels'] = torch.tensor(self.labels[idx])
@@ -508,6 +513,13 @@ def start_training(dataset_dir, epochs=5, batch_size=8, learning_rate=5e-5):
                 'val_samples': len(val_dataset),
                 'classes': list(id2label.values()),
             }
+
+            # Free the large training objects promptly so we don't keep a second
+            # model (plus the Trainer's optimizer state) in RAM after fine-tuning.
+            del model, trainer, result
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
         except ImportError as e:
             _training_status = {'running': False, 'progress': 0,
