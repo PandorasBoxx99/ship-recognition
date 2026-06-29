@@ -8,6 +8,7 @@ import { ExtraktorPage } from '@/pages/ExtraktorPage.tsx'
 import { DatenbankPage } from '@/pages/DatenbankPage.tsx'
 import { ShipsPage } from '@/pages/ShipsPage.tsx'
 import { ClassifyPage } from '@/pages/ClassifyPage.tsx'
+import { WiedererkennungPage } from '@/pages/WiedererkennungPage.tsx'
 import { TrainingPage } from '@/pages/TrainingPage.tsx'
 import { SettingsPage } from '@/pages/SettingsPage.tsx'
 import { DokuPage } from '@/pages/DokuPage.tsx'
@@ -47,6 +48,7 @@ export default function App() {
               <Route path="/Schiffe/:shipSlug" element={<ShipsPage />} />
               <Route path="/Erkennung" element={<ClassifyPage />} />
               <Route path="/KI-Erkennung" element={<Navigate to="/Erkennung" replace />} />
+              <Route path="/Wiedererkennung" element={<WiedererkennungPage />} />
               <Route path="/Training" element={<TrainingPage />} />
               <Route path="/Einstellungen" element={<SettingsPage />} />
               <Route path="/Doku" element={<DokuPage />} />

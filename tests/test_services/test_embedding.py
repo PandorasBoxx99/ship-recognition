@@ -1,7 +1,17 @@
 """Tests for the FAISS gallery and similarity confidence logic (no DINOv2 load)."""
 
+import io
+
 from backend.routers.advanced import _assess_confidence
 from backend.services import embedding_service
+
+
+def test_similarity_upload_rejects_non_image(client):
+    resp = client.post(
+        "/api/advanced/similarity/upload",
+        files={"image": ("notes.txt", io.BytesIO(b"not an image"), "text/plain")},
+    )
+    assert resp.status_code == 400
 
 
 def _row(sim, ship_id=1, name="Ever Given", stype="Container Ship"):

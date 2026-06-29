@@ -228,3 +228,33 @@ export interface ShipEntityListResponse {
   per_page: number
   pages: number
 }
+
+// Visual similarity / specific-ship recognition (DINOv2)
+export interface SimilarityMatch {
+  image_id: number
+  ship_id: number | null
+  file_path: string
+  src: string | null
+  ship_type: string | null
+  ship_name: string | null
+  similarity: number
+}
+
+export interface SimilarityBestMatch {
+  ship_id: number | null
+  ship_name: string | null
+  ship_type?: string | null
+  confidence: number
+  margin: number
+  confident: boolean
+  reason: string
+}
+
+export interface SimilarityResponse {
+  results: SimilarityMatch[]
+  best_match: SimilarityBestMatch
+  method: string
+  model: string
+  threshold: number
+  gallery_size: number | null
+}

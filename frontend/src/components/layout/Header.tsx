@@ -6,6 +6,7 @@ const tabs: { path: string; label: string; matchPrefix?: string }[] = [
   { path: '/daten/scraper', label: 'Daten', matchPrefix: '/daten' },
   { path: '/Schiffe', label: 'Schiffe', matchPrefix: '/Schiffe' },
   { path: '/Erkennung', label: 'Erkennung' },
+  { path: '/Wiedererkennung', label: 'Wiedererkennung' },
   { path: '/Training', label: 'Training' },
   { path: '/Einstellungen', label: 'Einstellungen' },
   { path: '/Doku', label: 'Doku' },

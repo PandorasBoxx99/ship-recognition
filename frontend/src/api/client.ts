@@ -4,6 +4,7 @@ import type {
   DetectionResult, DetectionStatus,
   Job, JobCreate, ModelInfo, PredefinedURL, Prediction, Ship,
   ShipEntityListResponse, ShipEntityDetail,
+  SimilarityResponse,
   Stats, TrainingStatus, VPNConnection,
 } from '@/types/index.ts'
 
@@ -79,6 +80,21 @@ export const detectionApi = {
 // Stats
 export const statsApi = {
   get: () => client.get<Stats>('/api/stats').then(r => r.data),
+}
+
+// Visual similarity / specific-ship recognition (DINOv2)
+export const similarityApi = {
+  searchUpload: (file: File, model = 'dinov2', topK = 10) => {
+    const fd = new FormData()
+    fd.append('image', file)
+    return client
+      .post<SimilarityResponse>(`/api/advanced/similarity/upload?model=${model}&top_k=${topK}`, fd)
+      .then(r => r.data)
+  },
+  reindex: () =>
+    client
+      .post<{ indexed: number; failed: number; gallery_size: number }>('/api/advanced/similarity/reindex')
+      .then(r => r.data),
 }
 
 // URLs / Settings

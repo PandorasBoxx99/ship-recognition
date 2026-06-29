@@ -2,9 +2,11 @@
 
 import json
 import os
+import re
+from datetime import datetime
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -48,6 +50,44 @@ def similarity_search(
     if not image_path or not os.path.exists(image_path):
         raise HTTPException(status_code=400, detail="Valid image_path or image_id required")
 
+    return _run_similarity(image_path, image_id, top_k, model, db)
+
+
+@router.post("/similarity/upload")
+async def similarity_search_upload(
+    image: UploadFile = File(...),
+    top_k: int = 10,
+    model: str = "dinov2",
+    db: Session = Depends(get_db),
+):
+    """Identify a ship from an uploaded photo via visual similarity + confidence."""
+    if not image.filename:
+        raise HTTPException(status_code=400, detail="Keine Datei ausgewählt")
+    if not (image.content_type or "").startswith("image/"):
+        raise HTTPException(status_code=400, detail="Ungültiger Dateityp (nur Bilder)")
+
+    data = await image.read()
+    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    if len(data) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Datei zu groß (max. {settings.MAX_UPLOAD_SIZE_MB} MB)",
+        )
+    if not data:
+        raise HTTPException(status_code=400, detail="Leere Datei")
+
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(image.filename))
+    filename = f"sim_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{safe_name}"
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+    save_path = os.path.join(settings.UPLOAD_DIR, filename)
+    with open(save_path, "wb") as f:
+        f.write(data)
+
+    return _run_similarity(save_path, None, top_k, model, db)
+
+
+def _run_similarity(image_path: str, image_id: int | None, top_k: int, model: str, db: Session):
+    """Shared body: encode, search, assess confidence, build the response."""
     if model == "dinov2":
         scored = _dinov2_search(image_path, image_id, top_k, db)
     else:
@@ -64,6 +104,20 @@ def similarity_search(
         "threshold": settings.SIMILARITY_THRESHOLD,
         "gallery_size": embedding_service.gallery_size() if model == "dinov2" else None,
     }
+
+
+def _image_src(file_path: str | None) -> str | None:
+    """Convert a local file path to a servable /downloads/ URL for the frontend."""
+    if not file_path:
+        return None
+    parts = file_path.replace("\\", "/").split("/")
+    if "downloads" in parts:
+        idx = parts.index("downloads")
+        return "/downloads/" + "/".join(parts[idx + 1:])
+    if "uploads" in parts:
+        idx = parts.index("uploads")
+        return "/uploads/" + "/".join(parts[idx + 1:])
+    return None
 
 
 def _dinov2_search(image_path: str, image_id: int | None, top_k: int, db: Session):
@@ -99,6 +153,7 @@ def _dinov2_search(image_path: str, image_id: int | None, top_k: int, db: Sessio
             "image_id": iid,
             "ship_id": img.ship_id,
             "file_path": img.file_path,
+            "src": _image_src(img.file_path),
             "ship_type": ship_type,
             "ship_name": ship_name,
             "similarity": round(sim, 4),
@@ -131,6 +186,7 @@ def _vit_search(image_path: str, top_k: int, db: Session):
                 "image_id": img.id,
                 "ship_id": img.ship_id,
                 "file_path": img.file_path,
+                "src": _image_src(img.file_path),
                 "ship_type": ship_type,
                 "ship_name": ship_name,
                 "similarity": round(sim, 4),

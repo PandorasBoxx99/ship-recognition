@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   vpnApi, jobsApi, shipEntitiesApi, detectionApi, classifyApi, trainingApi, augmentApi, statsApi, urlsApi,
+  similarityApi,
 } from '@/api/client.ts'
 import type { JobCreate } from '@/types/index.ts'
 
@@ -62,6 +63,16 @@ export const useDeleteJob = () => {
 
 export const useAnalyze = () =>
   useMutation({ mutationFn: (url: string) => jobsApi.analyze(url) })
+
+// Visual similarity / specific-ship recognition
+export const useSimilaritySearch = () =>
+  useMutation({
+    mutationFn: ({ file, model }: { file: File; model?: string }) =>
+      similarityApi.searchUpload(file, model),
+  })
+
+export const useSimilarityReindex = () =>
+  useMutation({ mutationFn: similarityApi.reindex })
 
 // Ship Entities (v2 — grouped)
 export const useShipEntities = (params: { search?: string; ship_type?: string; source?: string; page?: number; per_page?: number }) =>
