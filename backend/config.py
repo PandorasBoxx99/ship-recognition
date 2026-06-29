@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     DEFAULT_MODEL_NAME: str = "dima806/10_ship_types_image_detection"
     DEFAULT_MODEL_FALLBACK: str = "google/vit-base-patch16-224-in21k"
 
+    # Embeddings / visual similarity (specific-ship recognition via DINOv2)
+    EMBEDDING_MODEL: str = "facebook/dinov2-base"  # dinov2-small for CPU-only setups
+    SIMILARITY_THRESHOLD: float = 0.6  # open-set: below this -> "no confident match"
+    SIMILARITY_MARGIN: float = 0.05  # top1 - top2 must exceed this to be "confident"
+
     # VPN — NordVPN SOCKS5 proxy
     VPN_ENABLED: bool = True
     VPN_API_KEY: str = ""  # NordVPN access token (from my.nordaccount.com)

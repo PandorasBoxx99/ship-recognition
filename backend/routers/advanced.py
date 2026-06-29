@@ -9,9 +9,11 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from backend.config import settings
 from backend.database import get_db
 from backend.models.image import Image, ImageAnnotation
 from backend.models.ship import Ship
+from backend.services import embedding_service
 
 log = structlog.get_logger()
 
@@ -25,13 +27,16 @@ def similarity_search(
     image_path: str = "",
     image_id: int | None = None,
     top_k: int = 10,
+    model: str = "dinov2",
     db: Session = Depends(get_db),
 ):
-    """Find visually similar images using ViT embeddings.
+    """Find visually similar ships and identify the most likely specific ship.
 
-    Extracts embedding from the query image, computes cosine similarity
-    against all stored embeddings. Falls back to same-type matching if
-    embeddings are not available.
+    Encodes the query image into an embedding and ranks stored gallery images by
+    cosine similarity. `model` selects the embedding backend: "dinov2" (default,
+    best for specific-ship re-identification) or "vit" (the classifier's features).
+    Returns per-image scores plus a confidence assessment with an open-set
+    threshold ("no confident match" when nothing is similar enough).
     """
     # Determine query image path
     if image_id:
@@ -43,14 +48,15 @@ def similarity_search(
     if not image_path or not os.path.exists(image_path):
         raise HTTPException(status_code=400, detail="Valid image_path or image_id required")
 
+    embed = embedding_service.extract if model == "dinov2" else _extract_embedding
+
     try:
-        query_embedding = _extract_embedding(image_path)
+        query_embedding = embed(image_path)
     except Exception as e:
-        log.warning("embedding_extraction_failed", error=str(e))
-        # Fallback: classify and find same-type images
+        log.warning("embedding_extraction_failed", model=model, error=str(e))
         return _fallback_similarity(image_path, top_k, db)
 
-    # Compare against all images with known types
+    # Compare against the gallery (images linked to a ship entity)
     images = (
         db.query(Image, Ship.ship_type, Ship.name)
         .outerjoin(Ship, Image.ship_id == Ship.id)
@@ -64,10 +70,11 @@ def similarity_search(
         if not img.file_path or not os.path.exists(img.file_path):
             continue
         try:
-            emb = _extract_embedding(img.file_path)
+            emb = embed(img.file_path)
             sim = _cosine_similarity(query_embedding, emb)
             scored.append({
                 "image_id": img.id,
+                "ship_id": img.ship_id,
                 "file_path": img.file_path,
                 "ship_type": ship_type,
                 "ship_name": ship_name,
@@ -77,7 +84,54 @@ def similarity_search(
             continue
 
     scored.sort(key=lambda x: x["similarity"], reverse=True)
-    return {"results": scored[:top_k], "method": "embedding"}
+    best = _assess_confidence(scored)
+    return {
+        "results": scored[:top_k],
+        "best_match": best,
+        "method": "embedding",
+        "model": model,
+        "threshold": settings.SIMILARITY_THRESHOLD,
+    }
+
+
+def _assess_confidence(scored: list[dict]) -> dict:
+    """Derive a confidence + open-set decision from the ranked matches.
+
+    Confidence = top-1 cosine similarity. A match counts as confident only if it
+    clears the similarity threshold AND beats the runner-up by the margin, so a
+    query whose ship is not in the gallery returns confident=False.
+    """
+    if not scored:
+        return {"ship_id": None, "ship_name": None, "confidence": 0.0,
+                "margin": 0.0, "confident": False, "reason": "no_gallery_images"}
+
+    top = scored[0]
+    second = scored[1]["similarity"] if len(scored) > 1 else 0.0
+    margin = round(top["similarity"] - second, 4)
+    confident = (
+        top["similarity"] >= settings.SIMILARITY_THRESHOLD
+        and margin >= settings.SIMILARITY_MARGIN
+    )
+    return {
+        "ship_id": top["ship_id"],
+        "ship_name": top["ship_name"],
+        "ship_type": top["ship_type"],
+        "confidence": top["similarity"],
+        "margin": margin,
+        "confident": confident,
+        "reason": "ok" if confident else "below_threshold_or_ambiguous",
+    }
+
+
+@router.post("/similarity/reindex")
+def similarity_reindex(db: Session = Depends(get_db)):
+    """Precompute DINOv2 embeddings for all gallery images (warms the cache)."""
+    paths = [
+        img.file_path
+        for img in db.query(Image).filter(Image.file_path.isnot(None)).limit(2000).all()
+        if img.file_path and os.path.exists(img.file_path)
+    ]
+    return embedding_service.reindex_gallery(paths)
 
 
 def _extract_embedding(image_path: str) -> list[float]:
