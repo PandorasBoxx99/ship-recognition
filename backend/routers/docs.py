@@ -4,7 +4,7 @@ import subprocess
 
 from fastapi import APIRouter
 
-from backend.config import BASE_DIR
+from backend.config import BASE_DIR, settings
 
 router = APIRouter(prefix="/api/docs", tags=["docs"])
 
@@ -284,5 +284,150 @@ def get_model_documentation():
              "types": "Indonesische Schiffe", "source": "Paper (2025)"},
             {"name": "DeepShip", "images": "k.A.", "classes": "variabel",
              "types": "Audio + Bild Kombination", "source": "Paper"},
+        ],
+    }
+
+
+@router.get("/ml")
+def get_ml_docs():
+    """Documentation of the whole ML chain incl. all parameters (live config values)."""
+    return {
+        "title": "ML-Kette — Komponenten, Funktionsweise & Parameter",
+        "overview": (
+            "Die Pipeline besteht aus vier Stufen: (1) Detektion findet das Schiff im Bild und "
+            "schneidet es frei, (2) der ViT-Klassifikator bestimmt die Bauart, (3) DINOv2 "
+            "+ FAISS erkennen das konkrete Schiff per Ähnlichkeitssuche, (4) optionales ArcFace-"
+            "Fine-Tuning schärft die Embeddings auf einzelne Schiffe. ViT (Bauart) und DINOv2 "
+            "(Identität) sind komplementär und nutzen dieselbe Bildquelle."
+        ),
+        "components": [
+            {
+                "id": "detection",
+                "name": "1. Schiffs-Detektion & Zuschnitt",
+                "model": "Faster R-CNN (ResNet50-FPN, COCO-Gewichte)",
+                "purpose": "Findet Schiffe im Bild, liefert Bounding-Boxes und schneidet sie frei "
+                           "(Crops), damit nachgelagerte Modelle nur das Schiff sehen.",
+                "how": [
+                    "Torchvision Faster R-CNN, lazy geladen (thread-safe, double-checked).",
+                    "COCO-Klasse 'boat' (ID 9) wird gefiltert; Boxen nach Fläche sortiert.",
+                    "Crops werden mit Padding ausgeschnitten und als Bilder gespeichert.",
+                ],
+                "parameters": [
+                    {"name": "confidence_threshold", "default": "0.5",
+                     "desc": "Mindest-Score, ab dem eine Detektion akzeptiert wird (0.1–1.0)."},
+                    {"name": "padding_pct", "default": "0.05",
+                     "desc": "Rand um die Bounding-Box beim Zuschneiden (0.0–0.5)."},
+                ],
+                "config": [],
+                "endpoints": [
+                    "POST /api/v2/ships/{id}/detect",
+                    "POST /api/detect/batch",
+                    "GET /api/detect/batch/status",
+                ],
+            },
+            {
+                "id": "classification",
+                "name": "2. Bauart-Klassifikation (ViT)",
+                "model": settings.DEFAULT_MODEL_NAME,
+                "purpose": "Ordnet ein Bild einem Schiffstyp / einer Bauart zu "
+                           "(z. B. Container, Tanker, Bulker).",
+                "how": [
+                    "ViT (HuggingFace), lazy geladen; CLS-Token → Softmax über die Klassen.",
+                    "Fine-Tuning via HuggingFace Trainer auf Ordner-pro-Klasse-Datensätzen.",
+                    "Nach Training: Modell gespeichert, altes Modell freigegeben (gc).",
+                ],
+                "parameters": [
+                    {"name": "epochs", "default": "5",
+                     "desc": "Anzahl Trainingsdurchläufe über den Datensatz."},
+                    {"name": "batch_size", "default": "8",
+                     "desc": "Bilder pro Trainingsschritt."},
+                    {"name": "learning_rate", "default": "5e-5",
+                     "desc": "Lernrate des Optimierers."},
+                ],
+                "config": [
+                    {"key": "DEFAULT_MODEL_NAME", "value": settings.DEFAULT_MODEL_NAME,
+                     "desc": "Basis-/Standardmodell für die Klassifikation."},
+                    {"key": "MAX_UPLOAD_SIZE_MB", "value": str(settings.MAX_UPLOAD_SIZE_MB),
+                     "desc": "Maximale Upload-Größe (MB) bei der Klassifizierung."},
+                ],
+                "endpoints": [
+                    "POST /api/classify (Upload)",
+                    "POST /api/classify/ship/{item_id}",
+                    "POST /api/classify/batch",
+                    "POST /api/training/start",
+                ],
+            },
+            {
+                "id": "similarity",
+                "name": "3. Spezifisches Schiff — Ähnlichkeit (DINOv2 + FAISS)",
+                "model": settings.EMBEDDING_MODEL,
+                "purpose": "Erkennt das konkrete Schiff per Ähnlichkeit gegen eine Galerie "
+                           "bekannter Schiffe — inkl. Konfidenz und Open-Set-Entscheidung.",
+                "how": [
+                    "DINOv2 erzeugt pro Bild einen normierten Embedding-Vektor (CLS/pooled).",
+                    "FAISS-Index speichert die Galerie persistent auf Platte (IndexFlatIP).",
+                    "Suche = Nächste-Nachbarn; Konfidenz = Top-1-Cosinus, Margin = Top-1 − Top-2.",
+                    "Open-Set: unter der Schwelle gilt 'kein sicherer Treffer'.",
+                ],
+                "parameters": [
+                    {"name": "model", "default": "dinov2",
+                     "desc": "Embedding-Backend: 'dinov2' (empfohlen) oder 'vit'."},
+                    {"name": "top_k", "default": "10",
+                     "desc": "Anzahl zurückgegebener ähnlichster Bilder."},
+                ],
+                "config": [
+                    {"key": "EMBEDDING_MODEL", "value": settings.EMBEDDING_MODEL,
+                     "desc": "DINOv2-Variante (small=CPU, base/large=GPU)."},
+                    {"key": "SIMILARITY_THRESHOLD", "value": str(settings.SIMILARITY_THRESHOLD),
+                     "desc": "Open-Set-Schwelle: darunter 'kein sicherer Treffer'."},
+                    {"key": "SIMILARITY_MARGIN", "value": str(settings.SIMILARITY_MARGIN),
+                     "desc": "Mindest-Abstand Top-1 zu Top-2 für 'confident'."},
+                    {"key": "EMBEDDING_AUTO_INDEX", "value": str(settings.EMBEDDING_AUTO_INDEX),
+                     "desc": "Neue Bilder beim Scrapen automatisch indexieren (GPU empfohlen)."},
+                ],
+                "endpoints": [
+                    "POST /api/advanced/similarity/upload (Foto hochladen)",
+                    "POST /api/advanced/similarity/search",
+                    "POST /api/advanced/similarity/reindex (Galerie neu aufbauen)",
+                ],
+            },
+            {
+                "id": "reid",
+                "name": "4. ArcFace-Fine-Tuning (Wiedererkennung schärfen)",
+                "model": "Projektion auf eingefrorenen DINOv2-Features + ArcFace-Loss",
+                "purpose": "Trainiert eine schiffsspezifische Projektion, sodass einzelne Schiffe "
+                           "in den Embeddings deutlich besser getrennt werden.",
+                "how": [
+                    "Identitäten = v2-'ships' mit genügend Bildern; DINOv2-Features eingefroren.",
+                    "Additive Angular Margin zieht gleiche Schiffe zusammen, trennt andere.",
+                    "Ergebnis: Projektion in models/reid/projection.pt; extract() wendet sie an.",
+                    "Nach Training Galerie neu aufbauen (Embedding-Dimension ändert sich).",
+                ],
+                "parameters": [
+                    {"name": "min_images", "default": str(settings.REID_MIN_IMAGES),
+                     "desc": "Mindestanzahl Bilder, damit ein Schiff als Trainingsklasse zählt."},
+                    {"name": "epochs", "default": str(settings.REID_EPOCHS),
+                     "desc": "Trainingsdurchläufe der Projektion."},
+                ],
+                "config": [
+                    {"key": "REID_MIN_IMAGES", "value": str(settings.REID_MIN_IMAGES),
+                     "desc": "Schwelle: Bilder pro Schiff für eine Klasse."},
+                    {"key": "REID_EMBED_DIM", "value": str(settings.REID_EMBED_DIM),
+                     "desc": "Dimension des projizierten Embeddings."},
+                    {"key": "REID_EPOCHS", "value": str(settings.REID_EPOCHS),
+                     "desc": "Anzahl Trainings-Epochen."},
+                    {"key": "REID_ARCFACE_SCALE", "value": str(settings.REID_ARCFACE_SCALE),
+                     "desc": "Skalierung s der ArcFace-Logits."},
+                    {"key": "REID_ARCFACE_MARGIN", "value": str(settings.REID_ARCFACE_MARGIN),
+                     "desc": "Winkel-Margin m (Trennschärfe)."},
+                    {"key": "REID_LEARNING_RATE", "value": str(settings.REID_LEARNING_RATE),
+                     "desc": "Lernrate des Fine-Tunings."},
+                ],
+                "endpoints": [
+                    "GET /api/advanced/reid/readiness",
+                    "POST /api/advanced/reid/train",
+                    "GET /api/advanced/reid/status",
+                ],
+            },
         ],
     }

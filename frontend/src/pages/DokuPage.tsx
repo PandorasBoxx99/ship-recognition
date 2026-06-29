@@ -39,6 +39,23 @@ const useChangelog = () =>
     queryFn: () => axios.get('/api/docs/changelog').then(r => r.data),
   })
 
+interface MlParam { name: string; default: string; desc: string }
+interface MlConfig { key: string; value: string; desc: string }
+interface MlComponent {
+  id: string
+  name: string
+  model: string
+  purpose: string
+  how: string[]
+  parameters: MlParam[]
+  config: MlConfig[]
+  endpoints: string[]
+}
+interface MlDocs { title: string; overview: string; components: MlComponent[] }
+
+const useMlDocs = () =>
+  useQuery<MlDocs>({ queryKey: ['docs-ml'], queryFn: () => axios.get('/api/docs/ml').then(r => r.data) })
+
 const statusColors: Record<string, string> = {
   done: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
   'in-progress': 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
@@ -55,6 +72,7 @@ export function DokuPage() {
   const { data: plan } = usePlan()
   const { data: changelogData } = useChangelog()
   const { data: modelDocs } = useModelDocs()
+  const { data: ml } = useMlDocs()
   const am = modelDocs?.active_model
 
   return (
@@ -78,6 +96,86 @@ export function DokuPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* ML-Kette: Komponenten & Parameter */}
+      {ml && (
+        <Card>
+          <h2 className="text-xl font-semibold mb-1">{ml.title}</h2>
+          <p className="text-sm text-[var(--text-muted)] mb-4">{ml.overview}</p>
+          <div className="space-y-4">
+            {ml.components.map((c) => (
+              <div key={c.id} className="border border-[var(--border)] rounded-lg p-4">
+                <div className="flex items-baseline justify-between flex-wrap gap-2">
+                  <h3 className="font-semibold">{c.name}</h3>
+                  <span className="text-xs font-mono text-[var(--text-muted)]">{c.model}</span>
+                </div>
+                <p className="text-sm text-[var(--text-muted)] mt-1">{c.purpose}</p>
+
+                <h4 className="text-xs uppercase tracking-wider text-[var(--text-muted)] mt-3 mb-1">
+                  Funktionsweise
+                </h4>
+                <ul className="text-sm space-y-0.5">
+                  {c.how.map((h, i) => (
+                    <li key={i} className="flex gap-2">
+                      <span className="text-[var(--primary)] mt-0.5">·</span>
+                      <span>{h}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                {c.parameters.length > 0 && (
+                  <>
+                    <h4 className="text-xs uppercase tracking-wider text-[var(--text-muted)] mt-3 mb-1">
+                      Parameter
+                    </h4>
+                    <div className="space-y-1">
+                      {c.parameters.map((p) => (
+                        <div key={p.name} className="text-sm flex gap-2 flex-wrap">
+                          <span className="font-mono text-[var(--primary)] w-44 flex-shrink-0">{p.name}</span>
+                          <span className="font-mono text-[var(--text-muted)] w-16 flex-shrink-0">{p.default}</span>
+                          <span className="text-[var(--text-muted)] flex-1 min-w-[12rem]">{p.desc}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {c.config.length > 0 && (
+                  <>
+                    <h4 className="text-xs uppercase tracking-wider text-[var(--text-muted)] mt-3 mb-1">
+                      .env-Konfiguration
+                    </h4>
+                    <div className="space-y-1">
+                      {c.config.map((cf) => (
+                        <div key={cf.key} className="text-sm flex gap-2 flex-wrap">
+                          <span className="font-mono text-[var(--primary)] w-56 flex-shrink-0">{cf.key}</span>
+                          <span className="font-mono text-[var(--text-muted)] w-20 flex-shrink-0">{cf.value}</span>
+                          <span className="text-[var(--text-muted)] flex-1 min-w-[12rem]">{cf.desc}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {c.endpoints.length > 0 && (
+                  <>
+                    <h4 className="text-xs uppercase tracking-wider text-[var(--text-muted)] mt-3 mb-1">
+                      Endpunkte
+                    </h4>
+                    <div className="flex flex-wrap gap-1">
+                      {c.endpoints.map((e) => (
+                        <code key={e} className="text-xs bg-[var(--bg)] px-1.5 py-0.5 rounded text-[var(--text-muted)]">
+                          {e}
+                        </code>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
       )}
 
       {/* Active Model Details */}
