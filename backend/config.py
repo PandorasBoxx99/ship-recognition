@@ -51,6 +51,16 @@ class Settings(BaseSettings):
     # default because DINOv2 inference is slow on CPU; enable it with a GPU.
     EMBEDDING_AUTO_INDEX: bool = False
 
+    # ArcFace re-identification fine-tuning (learns a projection on top of frozen
+    # DINOv2 features so specific ships separate better). Artifact -> REID_DIR.
+    REID_DIR: str = str(BASE_DIR / "models" / "reid")
+    REID_MIN_IMAGES: int = 4  # ships need at least this many images to be a class
+    REID_EMBED_DIM: int = 256  # projected embedding dimension
+    REID_EPOCHS: int = 30
+    REID_ARCFACE_SCALE: float = 30.0
+    REID_ARCFACE_MARGIN: float = 0.5
+    REID_LEARNING_RATE: float = 1e-3
+
     # VPN — NordVPN SOCKS5 proxy
     VPN_ENABLED: bool = True
     VPN_API_KEY: str = ""  # NordVPN access token (from my.nordaccount.com)

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   vpnApi, jobsApi, shipEntitiesApi, detectionApi, classifyApi, trainingApi, augmentApi, statsApi, urlsApi,
-  similarityApi,
+  similarityApi, reidApi,
 } from '@/api/client.ts'
 import type { JobCreate } from '@/types/index.ts'
 
@@ -73,6 +73,25 @@ export const useSimilaritySearch = () =>
 
 export const useSimilarityReindex = () =>
   useMutation({ mutationFn: similarityApi.reindex })
+
+// ArcFace re-id fine-tuning
+export const useReidReadiness = () =>
+  useQuery({ queryKey: ['reid-readiness'], queryFn: reidApi.readiness })
+
+export const useReidStatus = () =>
+  useQuery({
+    queryKey: ['reid-status'],
+    queryFn: reidApi.status,
+    refetchInterval: (query) => (query.state.data?.running ? 2000 : false),
+  })
+
+export const useReidTrain = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: reidApi.train,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['reid-status'] }),
+  })
+}
 
 // Ship Entities (v2 — grouped)
 export const useShipEntities = (params: { search?: string; ship_type?: string; source?: string; page?: number; per_page?: number }) =>

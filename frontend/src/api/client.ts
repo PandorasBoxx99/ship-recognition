@@ -4,7 +4,7 @@ import type {
   DetectionResult, DetectionStatus,
   Job, JobCreate, ModelInfo, PredefinedURL, Prediction, Ship,
   ShipEntityListResponse, ShipEntityDetail,
-  SimilarityResponse,
+  SimilarityResponse, ReidReadiness, ReidStatus,
   Stats, TrainingStatus, VPNConnection,
 } from '@/types/index.ts'
 
@@ -95,6 +95,13 @@ export const similarityApi = {
     client
       .post<{ indexed: number; failed: number; gallery_size: number }>('/api/advanced/similarity/reindex')
       .then(r => r.data),
+}
+
+// ArcFace re-id fine-tuning
+export const reidApi = {
+  readiness: () => client.get<ReidReadiness>('/api/advanced/reid/readiness').then(r => r.data),
+  status: () => client.get<ReidStatus>('/api/advanced/reid/status').then(r => r.data),
+  train: () => client.post<{ status?: string; error?: string }>('/api/advanced/reid/train').then(r => r.data),
 }
 
 // URLs / Settings

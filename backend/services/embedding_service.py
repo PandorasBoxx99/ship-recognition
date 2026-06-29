@@ -67,8 +67,13 @@ def _load_model() -> bool:
             return False
 
 
-def extract(image_path: str) -> list[float]:
-    """Return the DINOv2 embedding (CLS/pooled vector) for an image."""
+# --- Fine-tuned ArcFace projection (optional) ---
+_projection = None
+_projection_lock = threading.Lock()
+
+
+def extract_raw(image_path: str) -> list[float]:
+    """Raw DINOv2 embedding (CLS/pooled vector), before any ArcFace projection."""
     if not _load_model():
         raise RuntimeError(_load_error or "DINOv2 not available")
 
@@ -82,6 +87,65 @@ def extract(image_path: str) -> list[float]:
         outputs = _model(**inputs)
         # pooler_output is the CLS token after layernorm — a solid global descriptor
         return outputs.pooler_output.squeeze(0).cpu().tolist()
+
+
+def extract(image_path: str) -> list[float]:
+    """Gallery/query embedding: raw DINOv2 features, projected through the
+    fine-tuned ArcFace head if one has been trained (else the raw features)."""
+    return apply_projection(extract_raw(image_path))
+
+
+def _projection_path() -> str:
+    return os.path.join(settings.REID_DIR, "projection.pt")
+
+
+def has_finetuned_model() -> bool:
+    return os.path.exists(_projection_path())
+
+
+def _load_projection():
+    """Load the trained projection head from disk, if present."""
+    global _projection
+    if _projection is not None:
+        return _projection
+    path = _projection_path()
+    if not os.path.exists(path):
+        return None
+    with _projection_lock:
+        if _projection is not None:
+            return _projection
+        import torch
+
+        from backend.services.reid import ProjectionHead
+
+        device = _device or "cpu"
+        ckpt = torch.load(path, map_location=device)
+        proj = ProjectionHead(ckpt["in_dim"], ckpt["out_dim"])
+        proj.load_state_dict(ckpt["state_dict"])
+        proj.to(device).eval()
+        _projection = proj
+        log.info("reid_projection_loaded", in_dim=ckpt["in_dim"], out_dim=ckpt["out_dim"])
+    return _projection
+
+
+def reload_projection() -> None:
+    """Force a reload of the projection (e.g. after training)."""
+    global _projection
+    with _projection_lock:
+        _projection = None
+    _load_projection()
+
+
+def apply_projection(raw_vector: list[float]) -> list[float]:
+    """Apply the trained projection to a raw DINOv2 vector (no-op if untrained)."""
+    proj = _load_projection()
+    if proj is None:
+        return raw_vector
+    import torch
+
+    with torch.no_grad():
+        t = torch.tensor(raw_vector, dtype=torch.float32, device=_device or "cpu").unsqueeze(0)
+        return proj(t).squeeze(0).cpu().tolist()
 
 
 def _normalize(vector):

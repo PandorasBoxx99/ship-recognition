@@ -15,7 +15,7 @@ from backend.config import settings
 from backend.database import get_db
 from backend.models.image import Image, ImageAnnotation
 from backend.models.ship import Ship
-from backend.services import embedding_service
+from backend.services import embedding_service, reid
 
 log = structlog.get_logger()
 
@@ -235,6 +235,27 @@ def similarity_reindex(db: Session = Depends(get_db)):
         if img.file_path and os.path.exists(img.file_path)
     ]
     return embedding_service.rebuild(items)
+
+
+# ============ ARCFACE RE-ID FINE-TUNING ============
+
+@router.get("/reid/readiness")
+def reid_readiness(min_images: int | None = None, db: Session = Depends(get_db)):
+    """How many ships have enough images to train an ArcFace re-id model."""
+    return reid.readiness(db, min_images)
+
+
+@router.post("/reid/train")
+def reid_train(min_images: int | None = None, epochs: int | None = None):
+    """Start ArcFace fine-tuning in the background (learns a ship-specific
+    projection on top of DINOv2). Rebuild the gallery afterwards."""
+    return reid.start_training(min_images, epochs)
+
+
+@router.get("/reid/status")
+def reid_status():
+    """Progress of the ArcFace fine-tuning."""
+    return reid.get_status()
 
 
 def _extract_embedding(image_path: str) -> list[float]:

@@ -258,3 +258,21 @@ export interface SimilarityResponse {
   threshold: number
   gallery_size: number | null
 }
+
+export interface ReidReadiness {
+  min_images: number
+  total_ships_with_images: number
+  qualifying_ships: number
+  usable_images: number
+  ready: boolean
+  has_trained_model: boolean
+}
+
+export interface ReidStatus {
+  running: boolean
+  progress: number
+  message: string
+  num_classes?: number
+  samples?: number
+  final_loss?: number
+}
