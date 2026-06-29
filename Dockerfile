@@ -40,7 +40,6 @@ RUN python -m playwright install chromium
 # Copy remaining application code
 COPY alembic.ini ./
 COPY run.py ./
-COPY schema.sql ./
 COPY .env.example .env
 
 # Copy built frontend

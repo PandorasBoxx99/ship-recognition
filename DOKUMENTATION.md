@@ -88,7 +88,7 @@ venv\Scripts\activate.bat       # Windows
 pip install -r requirements.txt
 
 # Datenbank initialisieren (automatisch beim ersten Start)
-python app.py
+python run.py
 ```
 
 ### Was das Setup macht
@@ -110,7 +110,7 @@ source venv/bin/activate        # Linux/Mac
 venv\Scripts\activate.bat       # Windows
 
 # App starten
-python app.py
+python run.py
 ```
 
 Die App laeuft dann auf: **http://localhost:3025**
@@ -398,9 +398,9 @@ Das trainierte Modell wird in `models/ship_classifier/finetune_DATUM/` gespeiche
 
 ```
 ship-scraper/
-    app.py                  # Flask Backend (Hauptdatei)
+    run.py                  # FastAPI-Start (Uvicorn)
+    backend/                # FastAPI-Backend (Router, Services, Modelle)
     ml_engine.py            # ML-Logik (Klassifizierung, Training, Augmentation)
-    schema.sql              # Datenbank-Schema
     requirements.txt        # Python Dependencies
     setup.sh                # One-Click Setup (Linux/Mac)
     setup.bat               # One-Click Setup (Windows)

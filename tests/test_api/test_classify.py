@@ -32,6 +32,27 @@ def test_classify_no_file(client):
     assert resp.status_code == 422  # Missing required file
 
 
+def test_classify_rejects_non_image(client):
+    fake = io.BytesIO(b"not an image at all")
+    resp = client.post(
+        "/api/classify",
+        files={"image": ("notes.txt", fake, "text/plain")},
+    )
+    assert resp.status_code == 400
+
+
+def test_classify_rejects_too_large(client, monkeypatch):
+    from backend.routers import classify as classify_mod
+
+    monkeypatch.setattr(classify_mod.settings, "MAX_UPLOAD_SIZE_MB", 0)
+    fake = io.BytesIO(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
+    resp = client.post(
+        "/api/classify",
+        files={"image": ("big.png", fake, "image/png")},
+    )
+    assert resp.status_code == 413
+
+
 @patch("backend.routers.classify.ml_service.classify_image", return_value=MOCK_PREDICTIONS)
 @patch("os.path.exists", return_value=True)
 def test_classify_existing_ship(mock_exists, mock_classify, client):

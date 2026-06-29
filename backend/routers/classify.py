@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import threading
 from datetime import datetime
 
@@ -28,12 +29,30 @@ async def classify_upload(
 ):
     """Classify an uploaded ship image."""
     if not image.filename:
-        raise HTTPException(status_code=400, detail="No file selected")
+        raise HTTPException(status_code=400, detail="Keine Datei ausgewählt")
+
+    # Validate declared content type (must be an image)
+    if not (image.content_type or "").startswith("image/"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ungültiger Dateityp: {image.content_type or 'unbekannt'} (nur Bilder erlaubt)",
+        )
 
     image_data = await image.read()
 
-    # Save upload for reference
-    filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{image.filename}"
+    # Enforce the configured upload size limit (DoS protection)
+    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    if len(image_data) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Datei zu groß (max. {settings.MAX_UPLOAD_SIZE_MB} MB)",
+        )
+    if not image_data:
+        raise HTTPException(status_code=400, detail="Leere Datei")
+
+    # Save upload for reference — sanitize the filename (strip path, safe chars only)
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(image.filename))
+    filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{safe_name}"
     save_path = os.path.join(settings.UPLOAD_DIR, filename)
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     with open(save_path, "wb") as f:
