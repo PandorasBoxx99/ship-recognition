@@ -55,16 +55,16 @@ def test_classify_rejects_too_large(client, monkeypatch):
 
 @patch("backend.routers.classify.ml_service.classify_image", return_value=MOCK_PREDICTIONS)
 @patch("os.path.exists", return_value=True)
-def test_classify_existing_ship(mock_exists, mock_classify, client):
-    ships = client.get("/api/ships").json()["ships"]
-    if not ships:
-        return  # skip if no ships
-    ship_id = ships[0]["id"]
+def test_classify_existing_ship(mock_exists, mock_classify, client, seeded_db):
+    from backend.models.item import Item
 
-    resp = client.post(f"/api/classify/ship/{ship_id}")
+    # /api/classify/ship/{id} takes a v1 item id (the scrape/ingestion layer)
+    item = seeded_db.query(Item).filter(Item.local_path.isnot(None)).first()
+
+    resp = client.post(f"/api/classify/ship/{item.id}")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["ship_id"] == ship_id
+    assert data["ship_id"] == item.id
     assert "predictions" in data
 
 

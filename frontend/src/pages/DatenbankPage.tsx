@@ -27,12 +27,12 @@ export function DatenbankPage() {
 
   const kpis = [
     { label: 'Jobs', value: stats?.total_jobs ?? '-' },
-    { label: 'Items (v1)', value: stats?.total_items ?? '-' },
-    { label: 'Heruntergeladen', value: stats?.downloaded ?? '-' },
+    { label: 'Schiffe (v2)', value: stats?.total_ships ?? '-' },
+    { label: 'Bilder (v2)', value: stats?.total_images ?? '-' },
     { label: 'Ausstehend', value: stats?.pending ?? '-' },
     { label: 'Fehlgeschlagen', value: stats?.failed ?? '-' },
     { label: 'Klassifizierungen', value: stats?.classifications ?? '-' },
-    { label: 'Ships (v2)', value: shipData?.total ?? '-' },
+    { label: 'Ships (v2, API)', value: shipData?.total ?? '-' },
     { label: 'Quellen', value: shipData?.sources?.length ?? '-' },
   ]
 
@@ -63,7 +63,7 @@ export function DatenbankPage() {
                 <div className="flex-1 bg-[var(--bg)] rounded-full h-4 overflow-hidden">
                   <div
                     className="h-4 rounded-full bg-[var(--primary)] transition-all"
-                    style={{ width: `${Math.max(5, (t.count / (stats.downloaded || 1)) * 100)}%` }}
+                    style={{ width: `${Math.max(5, (t.count / (stats.total_images || 1)) * 100)}%` }}
                   />
                 </div>
                 <span className="text-sm w-40 truncate">{t.type || 'Unbekannt'}</span>

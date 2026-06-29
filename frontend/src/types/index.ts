@@ -88,8 +88,8 @@ export interface ClassificationRecord {
 
 export interface Stats {
   total_jobs: number
-  total_items: number
-  downloaded: number
+  total_ships: number
+  total_images: number
   pending: number
   failed: number
   classifications: number

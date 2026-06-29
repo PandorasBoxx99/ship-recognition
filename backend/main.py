@@ -64,7 +64,6 @@ from backend.routers import (  # noqa: E402
     models,
     scrape,
     ship_entities,
-    ships,
     stats,
     training,
     vpn,
@@ -73,7 +72,6 @@ from backend.routers import settings as settings_router  # noqa: E402
 
 app.include_router(vpn.router)
 app.include_router(scrape.router)
-app.include_router(ships.router)
 app.include_router(classify.router)
 app.include_router(training.router)
 app.include_router(augmentation.router)

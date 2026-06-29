@@ -19,10 +19,10 @@ export function DashboardPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <MetricCard label="Jobs" value={stats?.total_jobs ?? 0} />
-        <MetricCard label="Downloads" value={stats?.downloaded ?? 0} />
+        <MetricCard label="Schiffe" value={stats?.total_ships ?? 0} />
+        <MetricCard label="Bilder" value={stats?.total_images ?? 0} />
         <MetricCard label="Ausstehend" value={stats?.pending ?? 0} />
         <MetricCard label="Klassifiziert" value={stats?.classifications ?? 0} />
-        <MetricCard label="Gesamt" value={stats?.total_items ?? 0} />
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">

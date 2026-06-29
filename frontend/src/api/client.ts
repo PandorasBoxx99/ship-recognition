@@ -2,9 +2,9 @@ import axios from 'axios'
 import type {
   AnalyzeResult, AugmentStatus, ClassificationRecord, ClassifyResponse,
   DetectionResult, DetectionStatus,
-  Job, JobCreate, ModelInfo, PredefinedURL, Prediction, Ship, ShipListResponse,
+  Job, JobCreate, ModelInfo, PredefinedURL, Prediction, Ship,
   ShipEntityListResponse, ShipEntityDetail,
-  ShipStats, Stats, TrainingStatus, VPNConnection,
+  Stats, TrainingStatus, VPNConnection,
 } from '@/types/index.ts'
 
 const client = axios.create({ baseURL: '' })
@@ -25,14 +25,6 @@ export const jobsApi = {
   pause: (id: number) => client.post(`/api/jobs/${id}/pause`).then(r => r.data),
   delete: (id: number) => client.delete(`/api/jobs/${id}/delete`).then(r => r.data),
   analyze: (url: string) => client.post<AnalyzeResult>('/api/analyze', { url }).then(r => r.data),
-}
-
-// Ships
-export const shipsApi = {
-  list: (params: { type?: string; source?: string; search?: string; page?: number; per_page?: number }) =>
-    client.get<ShipListResponse>('/api/ships', { params }).then(r => r.data),
-  get: (id: number) => client.get<Ship>(`/api/ships/${id}`).then(r => r.data),
-  stats: () => client.get<ShipStats>('/api/ships/stats').then(r => r.data),
 }
 
 // Classification

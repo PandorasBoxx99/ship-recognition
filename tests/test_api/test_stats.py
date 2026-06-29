@@ -1,20 +1,18 @@
-"""Tests for /api/stats endpoint."""
+"""Tests for /api/stats endpoint (ship data from v2, pipeline metrics from queue)."""
 
 
 def test_get_stats(client):
     resp = client.get("/api/stats")
     assert resp.status_code == 200
     data = resp.json()
-    assert "total_jobs" in data
-    assert "total_items" in data
-    assert "downloaded" in data
-    assert "pending" in data
-    assert "failed" in data
-    assert "classifications" in data
-    assert "type_distribution" in data
+    for key in (
+        "total_jobs", "total_ships", "total_images",
+        "pending", "failed", "classifications", "type_distribution",
+    ):
+        assert key in data
+    # Seed data has 1 job and 1 pending item (queue/ingestion layer)
     assert data["total_jobs"] >= 1
-    assert data["total_items"] >= 3
-    assert data["downloaded"] >= 2
+    assert data["pending"] >= 1
 
 
 def test_stats_type_distribution(client):

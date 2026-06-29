@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  vpnApi, jobsApi, shipsApi, shipEntitiesApi, detectionApi, classifyApi, trainingApi, augmentApi, statsApi, urlsApi,
+  vpnApi, jobsApi, shipEntitiesApi, detectionApi, classifyApi, trainingApi, augmentApi, statsApi, urlsApi,
 } from '@/api/client.ts'
 import type { JobCreate } from '@/types/index.ts'
 
@@ -62,20 +62,6 @@ export const useDeleteJob = () => {
 
 export const useAnalyze = () =>
   useMutation({ mutationFn: (url: string) => jobsApi.analyze(url) })
-
-// Ships
-export const useShips = (params: { type?: string; source?: string; search?: string; page?: number; per_page?: number }) =>
-  useQuery({
-    queryKey: ['ships', params],
-    queryFn: () => shipsApi.list(params),
-  })
-
-export const useShip = (id: number | null) =>
-  useQuery({
-    queryKey: ['ship', id],
-    queryFn: () => shipsApi.get(id!),
-    enabled: id !== null,
-  })
 
 // Ship Entities (v2 — grouped)
 export const useShipEntities = (params: { search?: string; ship_type?: string; source?: string; page?: number; per_page?: number }) =>
